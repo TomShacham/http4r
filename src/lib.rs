@@ -1,6 +1,14 @@
 use std::error::Error;
 use std::fs;
 
+pub mod client;
+pub mod filter;
+pub mod httpmessage;
+pub mod router;
+mod headers;
+pub mod server;
+pub mod httphandler;
+
 pub fn run<'a>(query: &str, filename: &'a str) -> Result<String, Box<dyn Error>> {
     let contents = fs::read_to_string(filename)?;
 
