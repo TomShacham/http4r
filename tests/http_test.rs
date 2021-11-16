@@ -1,14 +1,9 @@
-use std::net::{TcpListener, TcpStream};
-use std::time::Duration;
 use rusty::httpmessage::Status::{NotFound, OK};
-use rusty::httphandler::HttpHandler;
 
 #[cfg(test)]
 mod tests {
     use rusty::client::Client;
     use rusty::httpmessage::{get, ok, Request};
-    use rusty::httpmessage::HttpMessage::Response;
-    use rusty::httpmessage::Method::{GET, POST};
     use rusty::router::Router;
     use rusty::server::Server;
     use super::*;
@@ -17,7 +12,7 @@ mod tests {
     fn client_over_http() {
         let port = 7878;
         let handler = {
-            |req: Request| {
+            |_req: Request| {
                 ok(vec!(), "response body".to_string())
             }
         };

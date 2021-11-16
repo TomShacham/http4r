@@ -1,25 +1,20 @@
 use std::net::{TcpListener, TcpStream};
 use std::{str, thread};
-use std::borrow::Borrow;
 use std::io::{Read, Write};
-use std::sync::{Arc, mpsc, Mutex, MutexGuard};
+use std::sync::{Arc, mpsc, Mutex};
 use std::sync::mpsc::Receiver;
+use crate::headers::add_header;
 use crate::httphandler::{HttpHandler};
-use crate::httpmessage::{Method, Request, Response};
-use crate::httpmessage::Method::GET;
+use crate::httpmessage::{HttpMessage, Request};
 use crate::server::Message::NewJob;
 
-pub struct Server {
-    listener: TcpListener,
-    handler: HttpHandler,
-    port: u32,
-}
+pub struct Server {}
 
 impl Server {
     pub fn new(handler: HttpHandler, port: u32) {
         let addr = format!("127.0.0.1:{}", port);
         let listener = TcpListener::bind(addr).unwrap();
-        let pool = ThreadPool::new(4);
+        let _pool = ThreadPool::new(4);
 
         let handle_connection = |mut stream: TcpStream, h: HttpHandler| {
             let mut buffer = [0; 1024];
@@ -27,27 +22,18 @@ impl Server {
             stream.read(&mut buffer).unwrap();
 
             let string = str::from_utf8(&buffer).unwrap();
-            println!("got request in server {}", &string);
-
             let request = Request::from(string);
-
             let response = h(request);
 
-            let has_content_length = response.headers.iter().any(|(name, value)| name == "Content-Length");
-            println!("has content length {}", has_content_length.to_string());
+            let has_content_length = response.headers.iter().any(|(name, _value)| name == "Content-Length");
             if !has_content_length {
-                let mut with_content_length = response.headers.clone();
-                with_content_length.push(("Content-Length".to_string(), response.body.len().to_string()));
-                println!("response body is {}", response.body.to_string());
-                let response1 = Response {
-                    headers: with_content_length,
-                    ..response
-                };
-                let response_string: String = response1.into();
+                let content_length_header = ("Content-Length".to_string(), response.body.len().to_string());
+                let response = add_header(content_length_header, HttpMessage::Response(response)).to_res();
+                let response_string = response.to_string();
                 stream.write(response_string.as_bytes()).unwrap();
                 stream.flush().unwrap();
             } else {
-                let string1: String = response.into();
+                let string1: String = response.to_string();
                 stream.write(string1.as_bytes()).unwrap();
                 stream.flush().unwrap();
             }

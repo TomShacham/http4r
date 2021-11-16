@@ -1,4 +1,3 @@
-use std::fmt::format;
 use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
 use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError};
 
@@ -7,6 +6,20 @@ pub type Header = (String, String);
 pub enum HttpMessage {
     Request(Request),
     Response(Response),
+}
+impl HttpMessage {
+    pub fn to_res(self) -> Response {
+        match self {
+            HttpMessage::Response(res) => res,
+            _ => panic!("Not a response")
+        }
+    }
+    pub fn to_req(self) -> Request {
+        match self {
+            HttpMessage::Request(req) => req,
+            _ => panic!("Not a request")
+        }
+    }
 }
 
 impl From<Request> for HttpMessage {
@@ -42,7 +55,7 @@ impl From<HttpMessage> for Response {
 impl From<&str> for Request {
     fn from(str: &str) -> Self {
         let mut headers = vec!();
-        let mut split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
+        let split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
         let http = split_by_crlf.first().unwrap().to_string();
         let rest = &split_by_crlf[1..];
         let mut index = 1;
@@ -70,13 +83,13 @@ impl From<&str> for Request {
     }
 }
 
-impl Into<String> for Response {
-    fn into(self) -> String {
+impl Response {
+    pub fn to_string(&self) -> String {
         let mut response = String::new();
-        let http = format!("HTTP/1.1 {} {}", self.status.to_string(), self.status.to_u32());
+        let http = format!("HTTP/1.1 {} {}", &self.status.to_string(), &self.status.to_u32());
         response.push_str(&http);
         response.push_str("\r\n");
-        for (name, value) in self.headers {
+        for (name, value) in &self.headers {
             let header_string = format!("{}: {}", name, value);
             response.push_str(&header_string);
             response.push_str("\r\n");
@@ -90,9 +103,8 @@ impl Into<String> for Response {
 
 impl From<&str> for Response {
     fn from(str: &str) -> Self {
-        println!("response from {}", str.clone());
         let mut headers = vec!();
-        let mut split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
+        let split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
         let http = split_by_crlf.first().unwrap().to_string();
         let rest = &split_by_crlf[1..];
         let mut index = 1;
@@ -104,12 +116,11 @@ impl From<&str> for Response {
             index += 1;
             let pair = pair.split(": ").collect::<Vec<&str>>();
             let (name, value) = (pair.first(), pair.last());
-            println!("name, value {}, {}", name.clone().unwrap(), value.clone().unwrap());
             headers.push((name.unwrap().to_string(), value.unwrap().to_string()));
         }
         let body = rest.get(index).unwrap();
         let http = http.split(" ").collect::<Vec<&str>>();
-        let version = http[0];
+        let _version = http[0];
         let status = http[1];
 
         Response {

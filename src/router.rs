@@ -1,4 +1,3 @@
-use crate::httphandler::HttpHandler;
 use crate::httpmessage;
 use crate::httpmessage::{Request, Response};
 
