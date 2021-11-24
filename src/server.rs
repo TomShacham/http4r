@@ -11,10 +11,9 @@ use crate::server::Message::NewJob;
 pub struct Server {}
 
 impl Server {
-    pub fn new(handler: HttpHandler, port: u32) {
+    pub fn new(handler: HttpHandler, port: u32, pool: Option<ThreadPool>) {
         let addr = format!("127.0.0.1:{}", port);
         let listener = TcpListener::bind(addr).unwrap();
-        let _pool = ThreadPool::new(4);
 
         let handle_connection = |mut stream: TcpStream, h: HttpHandler| {
             let mut buffer = [0; 1024];
@@ -40,11 +39,22 @@ impl Server {
 
         };
 
-        thread::spawn(move || {
-            for stream in listener.incoming() {
-                handle_connection(stream.unwrap(), handler);
+        match pool {
+            Some(thread_pool) => {
+                for stream in listener.incoming() {
+                    thread_pool.execute(move || {
+                        handle_connection(stream.unwrap(), handler)
+                    });
+                }
             }
-        });
+            _ => {
+                thread::spawn(move || {
+                    for stream in listener.incoming() {
+                        handle_connection(stream.unwrap(), handler)
+                    }
+                });
+            }
+        }
     }
 }
 

@@ -17,7 +17,7 @@ mod tests {
             }
         };
 
-        Server::new(handler, port);
+        Server::new(handler, port, None);
         let client = Client { base_uri: String::from("127.0.0.1"), port };
         let request = get("".to_string(), vec!());
         let response = client.handle(request);
