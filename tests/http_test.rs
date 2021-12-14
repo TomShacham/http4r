@@ -3,17 +3,19 @@ use rusty::httpmessage::Status::{NotFound, OK};
 #[cfg(test)]
 mod tests {
     use rusty::client::Client;
-    use rusty::httpmessage::{get, ok, Request};
+    use rusty::httphandler::HttpHandler;
+    use rusty::httpmessage::{body_string, get, ok, Request};
+    use rusty::httpmessage::Body::BodyString;
     use rusty::router::Router;
-    use rusty::server::Server;
+    use rusty::server::{read_to_buffer, Server};
     use super::*;
 
     #[test]
     fn client_over_http() {
         let port = 7878;
-        let handler = {
+        let handler: HttpHandler = {
             |_req: Request| {
-                ok(vec!(), "response body".to_string())
+                return ok(vec!(("hi".to_string(), "there".to_string())), BodyString("response body".to_string()));
             }
         };
 
@@ -23,8 +25,8 @@ mod tests {
         let response = client.handle(request);
 
         assert_eq!("OK", response.status.to_string());
-        assert_eq!("Content-Length: 13", response.headers.iter().map(|(name, value)| format!("{}: {}", name, value)).collect::<String>());
-        assert_eq!("response body", response.body.to_string());
+        assert_eq!("response body".to_string(), body_string(response.body));
+        assert_eq!("hi: there", response.headers.iter().map(|(name, value)| format!("{}: {}", name, value)).collect::<String>());
     }
 
     #[test]

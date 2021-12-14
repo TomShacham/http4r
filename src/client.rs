@@ -11,8 +11,8 @@ impl Client {
 
         stream.write(request.as_bytes()).unwrap();
 
-        let mut buffer = [0; 1024];
-        stream.read(&mut buffer).unwrap();
+        let mut buffer = [0; 4096];
+        stream.try_clone().unwrap().read(&mut buffer).unwrap();
 
         let response = Response::from(str::from_utf8(&buffer).unwrap());
         response
