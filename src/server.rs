@@ -1,11 +1,11 @@
 use std::net::{TcpListener, TcpStream};
 use std::{str, thread};
-use std::io::{Read, Write};
+use std::io::{copy, Read, Write};
 use std::sync::{Arc, mpsc, Mutex};
 use std::sync::mpsc::Receiver;
 use crate::headers::add_header;
 use crate::httphandler::{HttpHandler};
-use crate::httpmessage::{get, HttpMessage, Request, Response};
+use crate::httpmessage::{get, HttpMessage, Request, request_from, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::server::Message::NewJob;
 
@@ -16,25 +16,26 @@ impl Server {
         let addr = format!("127.0.0.1:{}", port);
         let listener = TcpListener::bind(addr).unwrap();
 
-        let handle_connection = |mut stream: TcpStream, handler: HttpHandler| {
-            let buffer = read_to_buffer(&mut stream);
-            let string = str::from_utf8(&buffer).unwrap();
-            let request = Request::from(string);
-            let response = handler(request);
+        let call_handler = |mut stream: TcpStream, handler: HttpHandler| {
+            let mut buffer= [0 as u8; 16384];
+            stream.read(&mut buffer).unwrap();
+            let request = request_from(&buffer, &stream).unwrap();
+            let mut response = handler(request);
 
             let mut returning: String = response.resource_and_headers();
+
             match response.body {
-                BodyString(body_string) => {
+                BodyString(mut body_string) => {
                     returning.push_str(&body_string);
                     returning.push_str("\r\n");
-                    stream.write(returning.as_bytes()).unwrap();
-                },
-                BodyStream(mut body_stream) => {
                     stream.write(returning.as_bytes());
-                    let buffer_out = read_to_buffer(&mut body_stream);
-                    stream.write(&buffer_out);
+                }
+                BodyStream(ref mut body_stream) => {
+                    stream.write(returning.as_bytes());
+                    copy(body_stream, &mut stream);
                 }
             }
+
             stream.flush().unwrap();
         };
 
@@ -42,26 +43,19 @@ impl Server {
             Some(thread_pool) => {
                 for stream in listener.incoming() {
                     thread_pool.execute(move || {
-                        handle_connection(stream.unwrap(), http_handler)
+                        call_handler(stream.unwrap(), http_handler)
                     });
                 }
             }
             _ => {
                 thread::spawn(move || {
                     for stream in listener.incoming() {
-                        handle_connection(stream.unwrap(), http_handler)
+                        call_handler(stream.unwrap(), http_handler)
                     }
                 });
             }
         }
     }
-}
-
-pub fn read_to_buffer(stream: &mut TcpStream) -> [u8; 4096] {
-    let mut buffer: [u8; 4096] = [0; 4096];
-    stream.try_clone().unwrap()
-        .read(&mut buffer).unwrap();
-    buffer
 }
 
 pub struct ThreadPool {

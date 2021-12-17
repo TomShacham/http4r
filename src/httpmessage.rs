@@ -1,11 +1,11 @@
 use std::borrow::Borrow;
 use std::io::Read;
 use std::net::TcpStream;
+use std::ops::Index;
 use std::str;
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
 use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError};
-use crate::server::read_to_buffer;
 
 pub type Header = (String, String);
 
@@ -57,6 +57,45 @@ impl From<HttpMessage> for Response {
             _ => panic!("Not possible")
         }
     }
+}
+
+pub fn request_from(buffer: &[u8], stream: &TcpStream) -> Result<Request, String> {
+    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
+    let mut index = 0;
+    let mut snip = 0;
+    let mut head = None;
+    let mut headers = None;
+    for char in buffer {
+        if head.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
+            head = Some(&buffer[..index]);
+            snip = index;
+        }
+        if !head.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
+            headers = Some(&buffer[snip..index - prev.len()]);
+        }
+        prev.remove(0);
+        prev.push(*char as char);
+        if index > buffer.len() {
+            return Err(format!("Headers must be less than {}", buffer.len()));
+        }
+        index += 1;
+    }
+    let request_line = str::from_utf8(&head.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
+    ;
+    let (method, uri, http_version) = (request_line[0], request_line[1], request_line[2]);
+    let result = str::from_utf8(&headers.unwrap());
+
+    let headers = result.unwrap().split("\r\n").map(|pair| {
+        let pair = pair.split(": ").collect::<Vec<&str>>();
+        (pair[0].to_string(), pair[1].to_string())
+    }).collect::<Vec<(String, String)>>();
+
+    Ok(Request {
+        method: Method::from(method.to_string()),
+        uri: uri.to_string(),
+        headers,
+        body: Body::BodyString("".to_string()),
+    })
 }
 
 impl From<&str> for Request {
@@ -136,10 +175,9 @@ impl Response {
     }
 }
 
-
 pub enum Body {
     BodyString(String),
-    BodyStream(TcpStream),
+    BodyStream(Box<dyn Read>),
 }
 
 pub struct Request {
@@ -158,10 +196,11 @@ pub struct Response {
 pub fn body_string(body: Body) -> String {
     match body {
         BodyString(str) => str,
-        BodyStream(tcp_stream) => {
-            let buffer = read_to_buffer(&mut tcp_stream.try_clone().unwrap());
+        BodyStream(mut tcp_stream) => {
+            let mut buffer: [u8; 4096] = [0; 4096];
+            tcp_stream.read(&mut buffer).unwrap();
             str::from_utf8(&buffer).unwrap().to_string()
-        },
+        }
     }
 }
 

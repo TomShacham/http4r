@@ -7,7 +7,7 @@ mod tests {
     use rusty::httpmessage::{body_string, get, ok, Request};
     use rusty::httpmessage::Body::BodyString;
     use rusty::router::Router;
-    use rusty::server::{read_to_buffer, Server};
+    use rusty::server::{Server};
     use super::*;
 
     #[test]

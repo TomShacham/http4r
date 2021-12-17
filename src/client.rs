@@ -7,7 +7,8 @@ impl Client {
     pub fn handle(&self, req: Request) -> Response {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
-        let request = format!("{} / HTTP/1.1\r\nConnection: close\r\nAccept: text/html\r\n\r\nbody", req.method.value());
+        // todo() turn Request into a request
+        let request = format!("{} / HTTP/1.1\r\nConnection: close\r\nAccept: text/html\r\n\r\nrequest body", req.method.value());
 
         stream.write(request.as_bytes()).unwrap();
 
