@@ -7,21 +7,50 @@ use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
 use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError};
 
-pub type Header = (String, String);
 
-pub enum HttpMessage {
-    Request(Request),
-    Response(Response),
+type Headers = Vec<Header>;
+
+pub fn header(headers: &Headers, name: &str) -> Option<Header> {
+    for header in headers {
+        if header.0.to_lowercase() == name.to_lowercase() {
+            return Some(header.clone())
+        }
+    }
+    None
 }
 
-impl HttpMessage {
-    pub fn as_res(self) -> Response {
+pub fn add_header(headers: &Headers, header: Header) -> Headers {
+    let mut new = vec!();
+    let mut exists = false;
+    for h in headers {
+        if h.0 == header.0 {
+            new.push((h.clone().0, h.clone().1 + ", " + header.1.as_str()));
+            exists = true
+        } else {
+            new.push(h.clone())
+        }
+    }
+    if !exists {
+        new.push(header)
+    }
+    return new
+}
+
+pub type Header = (String, String);
+
+pub enum HttpMessage<'a> {
+    Request(Request<'a>),
+    Response(Response<'a>),
+}
+
+impl<'a> HttpMessage<'a> {
+    pub fn as_res(self) -> Response<'a> {
         match self {
             HttpMessage::Response(res) => res,
             _ => panic!("Not a response")
         }
     }
-    pub fn as_req(self) -> Request {
+    pub fn as_req(self) -> Request<'a> {
         match self {
             HttpMessage::Request(req) => req,
             _ => panic!("Not a request")
@@ -29,37 +58,7 @@ impl HttpMessage {
     }
 }
 
-impl From<Request> for HttpMessage {
-    fn from(req: Request) -> Self {
-        HttpMessage::Request(req)
-    }
-}
-
-impl From<Response> for HttpMessage {
-    fn from(res: Response) -> Self {
-        HttpMessage::Response(res)
-    }
-}
-
-impl From<HttpMessage> for Request {
-    fn from(message: HttpMessage) -> Self {
-        match message {
-            HttpMessage::Request(req) => req,
-            _ => panic!("Not possible")
-        }
-    }
-}
-
-impl From<HttpMessage> for Response {
-    fn from(message: HttpMessage) -> Self {
-        match message {
-            HttpMessage::Response(res) => res,
-            _ => panic!("Not possible")
-        }
-    }
-}
-
-pub fn request_from(buffer: &[u8], stream: &TcpStream) -> Result<Request, String> {
+pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, String> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut index = 0;
     let mut snip = 0;
@@ -83,53 +82,45 @@ pub fn request_from(buffer: &[u8], stream: &TcpStream) -> Result<Request, String
     let request_line = str::from_utf8(&head.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
     ;
     let (method, uri, http_version) = (request_line[0], request_line[1], request_line[2]);
-    let result = str::from_utf8(&headers.unwrap());
+    let header_string = str::from_utf8(&headers.unwrap()).unwrap();
 
-    let headers = result.unwrap().split("\r\n").map(|pair| {
+    let mut headers = vec!();
+    header_string.split("\r\n").for_each(|pair| {
         let pair = pair.split(": ").collect::<Vec<&str>>();
-        (pair[0].to_string(), pair[1].to_string())
-    }).collect::<Vec<(String, String)>>();
+        headers = add_header(&headers, (pair[0].to_string(), pair[1].to_string()));
+    });
 
-    Ok(Request {
+    let mut left_to_read = 0;
+    let mut body ;
+    let content_length: Option<usize> = content_length_header(&headers);
+    match content_length {
+        Some(content_length) if content_length + index < buffer.len() => {
+            let result = str::from_utf8(&buffer[index..(content_length + index)]).unwrap().to_string();
+            body = Body::BodyString(result)
+        }
+        Some(content_length) => {
+            let so_far = &buffer[index..(content_length + index)];
+            let rest = stream1.take(content_length as u64 - index as u64);
+            body = Body::BodyStream(Box::new(so_far.chain(rest)));
+            left_to_read = content_length - index;
+        }
+        _ => body = Body::BodyString("".to_string())
+    }
+
+    let request = Request {
         method: Method::from(method.to_string()),
         uri: uri.to_string(),
         headers,
-        body: Body::BodyString("".to_string()),
-    })
+        body,
+    };
+    Ok(request)
 }
 
-impl From<&str> for Request {
-    fn from(str: &str) -> Self {
-        let mut headers = vec!();
-        let split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
-        let http = split_by_crlf.first().unwrap().to_string();
-        let rest = &split_by_crlf[1..];
-        let mut index = 1;
-        for pair in rest {
-            // indicates start of body, which is preceded by two consecutive \r\n
-            if *pair == "" {
-                break;
-            }
-            index += 1;
-            let pair = pair.split(": ").collect::<Vec<&str>>();
-            let (name, value) = (pair.first(), pair.last());
-            headers.push((name.unwrap().to_string(), value.unwrap().to_string()));
-        }
-        let body = rest.get(index).unwrap();
-        let http = http.split(" ").collect::<Vec<&str>>();
-        let method = http[0];
-        let uri = http[1];
-
-        Request {
-            method: Method::from(method.to_uppercase()),
-            headers,
-            body: BodyString(body.to_string()),
-            uri: uri.to_string(),
-        }
-    }
+pub fn content_length_header(headers: &Vec<Header>) -> Option<usize> {
+    header(&headers, "Content-Length").map(|x| { x.1.parse().unwrap() })
 }
 
-impl Response {
+impl<'a> Response<'a> {
     pub fn resource_and_headers(&self) -> String {
         let mut response = String::new();
         let http = format!("HTTP/1.1 {} {}", &self.status.to_string(), &self.status.to_u32());
@@ -145,7 +136,7 @@ impl Response {
     }
 }
 
-impl Response {
+impl<'a> Response<'a> {
     pub fn from(str: &str) -> Self {
         let mut headers = vec!();
         let split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
@@ -175,21 +166,21 @@ impl Response {
     }
 }
 
-pub enum Body {
+pub enum Body<'a> {
     BodyString(String),
-    BodyStream(Box<dyn Read>),
+    BodyStream(Box<dyn Read + 'a>),
 }
 
-pub struct Request {
-    pub headers: Vec<Header>,
-    pub body: Body,
+pub struct Request<'a> {
+    pub headers: Headers,
+    pub body: Body<'a>,
     pub uri: String,
     pub method: Method,
 }
 
-pub struct Response {
-    pub headers: Vec<Header>,
-    pub body: Body,
+pub struct Response<'a> {
+    pub headers: Headers,
+    pub body: Body<'a>,
     pub status: Status,
 }
 
@@ -236,15 +227,15 @@ impl Method {
     }
 }
 
-pub fn ok(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn ok<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: OK }
 }
 
-pub fn not_found(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn not_found<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: NotFound }
 }
 
-pub fn get(uri: String, headers: Vec<(String, String)>) -> Request {
+pub fn get<'a>(uri: String, headers: Vec<(String, String)>) -> Request<'a> {
     Request { method: GET, headers, body: BodyString("".to_string()), uri }
 }
 

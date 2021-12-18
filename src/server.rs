@@ -1,11 +1,12 @@
 use std::net::{TcpListener, TcpStream};
 use std::{str, thread};
+use std::borrow::Borrow;
 use std::io::{copy, Read, Write};
 use std::sync::{Arc, mpsc, Mutex};
 use std::sync::mpsc::Receiver;
 use crate::headers::add_header;
 use crate::httphandler::{HttpHandler};
-use crate::httpmessage::{get, HttpMessage, Request, request_from, Response};
+use crate::httpmessage::{Body, content_length_header, get, header, HttpMessage, Request, request_from, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::server::Message::NewJob;
 
@@ -17,23 +18,24 @@ impl Server {
         let listener = TcpListener::bind(addr).unwrap();
 
         let call_handler = |mut stream: TcpStream, handler: HttpHandler| {
-            let mut buffer= [0 as u8; 16384];
+            let mut buffer = [0 as u8; 16384];
             stream.read(&mut buffer).unwrap();
-            let request = request_from(&buffer, &stream).unwrap();
-            let mut response = handler(request);
+            let mut request = request_from(&buffer, stream.try_clone().unwrap()).unwrap();
 
+            let mut response = handler(request);
             let mut returning: String = response.resource_and_headers();
 
             match response.body {
                 BodyString(mut body_string) => {
                     returning.push_str(&body_string);
                     returning.push_str("\r\n");
-                    stream.write(returning.as_bytes());
+                    &stream.write(returning.as_bytes());
                 }
                 BodyStream(ref mut body_stream) => {
-                    stream.write(returning.as_bytes());
+                    &stream.write(returning.as_bytes());
                     copy(body_stream, &mut stream);
                 }
+                _ => {}
             }
 
             stream.flush().unwrap();
