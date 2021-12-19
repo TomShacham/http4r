@@ -5,7 +5,7 @@ use std::ops::Index;
 use std::str;
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
-use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError};
+use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError, BAD_REQUEST};
 
 
 type Headers = Vec<Header>;
@@ -17,6 +17,14 @@ pub fn header(headers: &Headers, name: &str) -> Option<Header> {
         }
     }
     None
+}
+
+pub fn headers_to_string(headers: &Headers) -> String {
+    headers.iter().map(|h| {
+        let clone = h.clone();
+        clone.0 + ": " + clone.1.as_str()
+    }).collect::<Vec<String>>()
+        .join("\r\n")
 }
 
 pub fn add_header(headers: &Headers, header: Header) -> Headers {
@@ -58,7 +66,7 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, String> {
+pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, RequestError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut index = 0;
     let mut snip = 0;
@@ -71,11 +79,12 @@ pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, String
         }
         if !head.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
             headers = Some(&buffer[snip..index - prev.len()]);
+            break;
         }
         prev.remove(0);
         prev.push(*char as char);
         if index > buffer.len() {
-            return Err(format!("Headers must be less than {}", buffer.len()));
+            return Err(RequestError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
         }
         index += 1;
     }
@@ -83,26 +92,26 @@ pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, String
     ;
     let (method, uri, http_version) = (request_line[0], request_line[1], request_line[2]);
     let header_string = str::from_utf8(&headers.unwrap()).unwrap();
+    let headers = parse_headers(header_string);
 
-    let mut headers = vec!();
-    header_string.split("\r\n").for_each(|pair| {
-        let pair = pair.split(": ").collect::<Vec<&str>>();
-        headers = add_header(&headers, (pair[0].to_string(), pair[1].to_string()));
-    });
+    if header(&headers, "Content-Length").is_none() &&
+        header(&headers, "Transfer-Encoding").is_none() {
+        return Err(RequestError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()))
+    }
 
-    let mut left_to_read = 0;
+    // todo() support trailers
+
     let mut body ;
     let content_length: Option<usize> = content_length_header(&headers);
     match content_length {
-        Some(content_length) if content_length + index < buffer.len() => {
+        Some(content_length) if content_length + index <= buffer.len() => {
             let result = str::from_utf8(&buffer[index..(content_length + index)]).unwrap().to_string();
             body = Body::BodyString(result)
         }
         Some(content_length) => {
-            let so_far = &buffer[index..(content_length + index)];
-            let rest = stream1.take(content_length as u64 - index as u64);
+            let so_far = &buffer[index..buffer.len()];
+            let rest = stream1.take(content_length as u64 - buffer.len() as u64);
             body = Body::BodyStream(Box::new(so_far.chain(rest)));
-            left_to_read = content_length - index;
         }
         _ => body = Body::BodyString("".to_string())
     }
@@ -114,6 +123,20 @@ pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, String
         body,
     };
     Ok(request)
+}
+
+pub enum RequestError {
+    NoContentLengthOrTransferEncoding(String),
+    HeadersTooBig(String)
+}
+
+fn parse_headers(header_string: &str) -> Vec<Header> {
+    let mut headers = vec!();
+    header_string.split("\r\n").for_each(|pair| {
+        let pair = pair.split(": ").collect::<Vec<&str>>();
+        headers = add_header(&headers, (pair[0].to_string(), pair[1].to_string()));
+    });
+    headers
 }
 
 pub fn content_length_header(headers: &Vec<Header>) -> Option<usize> {
@@ -137,7 +160,7 @@ impl<'a> Response<'a> {
 }
 
 impl<'a> Response<'a> {
-    pub fn from(str: &str) -> Self {
+    pub fn from(str: String) -> Self {
         let mut headers = vec!();
         let split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
         let http = split_by_crlf.first().unwrap().to_string();
@@ -169,6 +192,13 @@ impl<'a> Response<'a> {
 pub enum Body<'a> {
     BodyString(String),
     BodyStream(Box<dyn Read + 'a>),
+}
+
+pub fn body_length(body: &Body) -> u32 {
+    match body {
+        BodyString(str) => str.len() as u32,
+        BodyStream(stream) => panic!("Cannot find length of BodyStream, please provide Content-Length header")
+    }
 }
 
 pub struct Request<'a> {
@@ -231,6 +261,10 @@ pub fn ok<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: OK }
 }
 
+pub fn bad_request<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+    Response { headers, body, status: BAD_REQUEST }
+}
+
 pub fn not_found<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: NotFound }
 }
@@ -239,11 +273,16 @@ pub fn get<'a>(uri: String, headers: Vec<(String, String)>) -> Request<'a> {
     Request { method: GET, headers, body: BodyString("".to_string()), uri }
 }
 
+pub fn post<'a>(uri: String, headers: Vec<(String, String)>, body: Body<'a>) -> Request<'a> {
+    Request { method: POST, headers, body, uri }
+}
+
 
 #[derive(PartialEq, Debug)]
 #[repr(u32)]
 pub enum Status {
     OK = 200,
+    BAD_REQUEST = 400,
     NotFound = 404,
     InternalServerError = 500,
     Unknown = 0,
