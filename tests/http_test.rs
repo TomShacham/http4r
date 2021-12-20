@@ -28,6 +28,30 @@ mod tests {
         assert_eq!("".to_string(), body_string(response.body));
     }
 
+    //todo() DO NOT EXPECT A CONTENT LENGTH FOR HEAD,OPTIONS,CONNECT,204,1XX ETC
+    //todo() handle duplicate Content-lengths Content-Length: 42, 42
+    //todo() handle both transfer encoding and content length as error
+    // If a message is received with both a Transfer-Encoding and a
+    //        Content-Length header field, the Transfer-Encoding overrides the
+    //        Content-Length.  Such a message might indicate an attempt to
+    //        perform request smuggling (Section 9.5) or response splitting
+    //        (Section 9.4) and ought to be handled as an error.  A sender MUST
+    //        remove the received Content-Length field prior to forwarding such
+    //        a message downstream.
+    //todo() If a message is received without Transfer-Encoding and with
+    //        either multiple Content-Length header fields having differing
+    //        field-values or a single Content-Length header field having an
+    //        invalid value, then the message framing is invalid and the
+    //        recipient MUST treat it as an unrecoverable error.  If this is a
+    //        request message, the server MUST respond with a 400 (Bad Request)
+    //        status code and then close the connection.
+    //todo() When a server listening only for HTTP request messages, or processing
+    //    what appears from the start-line to be an HTTP request message,
+    //    receives a sequence of octets that does not match the HTTP-message
+    //    grammar aside from the robustness exceptions listed above, the server
+    //    SHOULD respond with a 400 (Bad Request) response.
+    //todo() handle set-cookie especially as multiple headers of this value cannot be combined
+    // with commas
     #[test]
     fn gives_you_a_bodystream_if_entity_bigger_than_buffer() {
         let port = 7879;

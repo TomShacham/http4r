@@ -5,7 +5,7 @@ use std::ops::Index;
 use std::str;
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
-use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError, BAD_REQUEST};
+use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError, BadRequest, LengthRequired};
 
 
 type Headers = Vec<Header>;
@@ -262,7 +262,11 @@ pub fn ok<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
 }
 
 pub fn bad_request<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
-    Response { headers, body, status: BAD_REQUEST }
+    Response { headers, body, status: BadRequest }
+}
+
+pub fn length_required<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+    Response { headers, body, status: LengthRequired }
 }
 
 pub fn not_found<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
@@ -282,7 +286,8 @@ pub fn post<'a>(uri: String, headers: Vec<(String, String)>, body: Body<'a>) -> 
 #[repr(u32)]
 pub enum Status {
     OK = 200,
-    BAD_REQUEST = 400,
+    BadRequest = 400,
+    LengthRequired = 411,
     NotFound = 404,
     InternalServerError = 500,
     Unknown = 0,

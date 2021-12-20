@@ -7,7 +7,7 @@ use std::sync::{Arc, mpsc, Mutex};
 use std::sync::mpsc::Receiver;
 use crate::headers::add_header;
 use crate::httphandler::{HttpHandler};
-use crate::httpmessage::{bad_request, Body, content_length_header, get, header, HttpMessage, ok, Request, request_from, RequestError, Response};
+use crate::httpmessage::{bad_request, Body, content_length_header, get, header, HttpMessage, length_required, ok, Request, request_from, RequestError, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::server::Message::NewJob;
 
@@ -33,7 +33,7 @@ impl Server {
                     Self::write_response_to_wire(&mut stream, response)
                 },
                 Err(RequestError::NoContentLengthOrTransferEncoding(msg)) => {
-                    let mut response = bad_request(vec!(), BodyString(msg));
+                    let mut response = length_required(vec!(), BodyString(msg));
                     Self::write_response_to_wire(&mut stream, response)
                 },
                 Ok(request) => {
@@ -71,7 +71,6 @@ impl Server {
         match response.body {
             BodyString(body_string) => {
                 returning.push_str(&body_string);
-                returning.push_str("\r\n");
                 &stream.write(returning.as_bytes());
             }
             BodyStream(ref mut body_stream) => {

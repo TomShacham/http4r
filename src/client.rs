@@ -1,19 +1,29 @@
-use std::io::{Read, Write};
+use std::io::{copy, Error, Read, Write};
 use std::net::TcpStream;
-use std::str;
+use std::{str};
+use std::ops::Deref;
 use crate::httpmessage::{add_header, body_length, header, headers_to_string, Request, Response};
+use crate::httpmessage::Body::{BodyStream, BodyString};
 
 impl Client {
     pub fn handle(&self, req: Request) -> Response {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
 
-        let request = Self::with_content_length(req);
-        let request_string = format!("{} / HTTP/1.1\r\n{}\r\n\r\nrequest body", request.method.value(), headers_to_string(&request.headers));
+        let mut request = Self::with_content_length(req);
+        let request_string = format!("{} / HTTP/1.1\r\n{}\r\n\r\n", request.method.value(), headers_to_string(&request.headers));
 
-        stream.write(request_string.as_bytes()).unwrap();
+        stream.write(request_string.as_bytes());
+        match request.body {
+            BodyStream(ref mut read) => {
+                copy(read, &mut stream);
+            },
+            BodyString(str) => {
+                stream.write(str.as_bytes()).unwrap();
+            }
+        }
 
-        //todo() FIGURE OUT WHETHER TO RESPOND WITH A BODYSTREAM OR BODYSTRING,
+        //todo() FIGURE OUT WHETHER TO CREATE A RESPONSE WITH A BODYSTREAM OR BODYSTRING,
         // DONT JUST READ INTO A BODYSTRING, ACTUALLY BASE IT ON THE CONTENT LENGTH HEADER?
         // TIME TO WRITE THE RESPONSE PARSER, LIKE THE REQUEST ONE THAT GOES THROUGH BYTE BY BYTE.
         let mut buffer = [0; 4096];
