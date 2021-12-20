@@ -5,7 +5,7 @@ mod tests {
     use std::io::{BufRead, BufReader, Read, repeat};
     use rusty::client::Client;
     use rusty::httphandler::HttpHandler;
-    use rusty::httpmessage::{body_string, get, header, headers_to_string, ok, post, Request};
+    use rusty::httpmessage::{body_string, get, header, headers_to_string, ok, post, Request, Response, ResponseError};
     use rusty::httpmessage::Body::{BodyStream, BodyString};
     use rusty::router::Router;
     use rusty::server::{Server, ServerOptions};
@@ -21,11 +21,12 @@ mod tests {
         Server::new(pass_through_req_handler, ServerOptions { port: Some(port), pool: None });
         let client = Client { base_uri: String::from("127.0.0.1"), port };
         let request = get("".to_string(), vec!());
-        let response = client.handle(request);
-
-        assert_eq!("OK", response.status.to_string());
-        assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
-        assert_eq!("".to_string(), body_string(response.body));
+        let response = client.handle(request, |response: Response| {
+            assert_eq!("OK", response.status.to_string());
+            assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
+            assert_eq!("".to_string(), body_string(response.body));
+            Ok(())
+        });
     }
 
     //todo() DO NOT EXPECT A CONTENT LENGTH FOR HEAD,OPTIONS,CONNECT,204,1XX ETC
@@ -63,15 +64,17 @@ mod tests {
         Server::new(pass_through_req_handler, ServerOptions { port: Some(port), pool: None });
         let client = Client { base_uri: String::from("127.0.0.1"), port };
         let request = post("/".to_string(), vec!(("Content-Length".to_string(), 20000.to_string())), BodyStream(Box::new(buffer)));
-        let response = client.handle(request);
+        let response = client.handle(request, |response| {
+            assert_eq!("OK", response.status.to_string());
+            assert_eq!("Content-Length: 20000", headers_to_string(&response.headers));
 
-        assert_eq!("OK", response.status.to_string());
-        assert_eq!("Content-Length: 20000", headers_to_string(&response.headers));
+            match response.body {
+                BodyString(str) => panic!("Should not be BodyString"),
+                BodyStream(str) => assert!(true)
+            }
+            Ok(())
+        });
 
-        match response.body {
-            BodyString(str) => panic!("Should not be BodyString"),
-            BodyStream(str) => assert!(true)
-        }
     }
 
     #[test]

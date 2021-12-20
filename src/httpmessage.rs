@@ -13,7 +13,7 @@ type Headers = Vec<Header>;
 pub fn header(headers: &Headers, name: &str) -> Option<Header> {
     for header in headers {
         if header.0.to_lowercase() == name.to_lowercase() {
-            return Some(header.clone())
+            return Some(header.clone());
         }
     }
     None
@@ -41,7 +41,7 @@ pub fn add_header(headers: &Headers, header: Header) -> Headers {
     if !exists {
         new.push(header)
     }
-    return new
+    return new;
 }
 
 pub type Header = (String, String);
@@ -66,18 +66,18 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, RequestError> {
+pub fn request_from(buffer: &[u8], stream: TcpStream) -> Result<Request, RequestError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut index = 0;
     let mut snip = 0;
-    let mut head = None;
+    let mut request_line = None;
     let mut headers = None;
     for char in buffer {
-        if head.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
-            head = Some(&buffer[..index]);
+        if request_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
+            request_line = Some(&buffer[..index]);
             snip = index;
         }
-        if !head.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
+        if !request_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
             headers = Some(&buffer[snip..index - prev.len()]);
             break;
         }
@@ -88,20 +88,20 @@ pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, Reques
         }
         index += 1;
     }
-    let request_line = str::from_utf8(&head.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
-    ;
+    let request_line = str::from_utf8(&request_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
+
     let (method, uri, http_version) = (request_line[0], request_line[1], request_line[2]);
     let header_string = str::from_utf8(&headers.unwrap()).unwrap();
     let headers = parse_headers(header_string);
 
     if header(&headers, "Content-Length").is_none() &&
         header(&headers, "Transfer-Encoding").is_none() {
-        return Err(RequestError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()))
+        return Err(RequestError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
     }
 
     // todo() support trailers
 
-    let mut body ;
+    let mut body;
     let content_length: Option<usize> = content_length_header(&headers);
     match content_length {
         Some(content_length) if content_length + index <= buffer.len() => {
@@ -110,7 +110,7 @@ pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, Reques
         }
         Some(content_length) => {
             let so_far = &buffer[index..buffer.len()];
-            let rest = stream1.take(content_length as u64 - buffer.len() as u64);
+            let rest = stream.take(content_length as u64 - buffer.len() as u64);
             body = Body::BodyStream(Box::new(so_far.chain(rest)));
         }
         _ => body = Body::BodyString("".to_string())
@@ -125,9 +125,71 @@ pub fn request_from(buffer: &[u8], stream1: TcpStream) -> Result<Request, Reques
     Ok(request)
 }
 
+pub fn response_from(buffer: &[u8], stream: TcpStream) -> Result<Response, ResponseError> {
+    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
+    let mut index = 0;
+    let mut snip = 0;
+    let mut status_line = None;
+    let mut headers = None;
+    for char in buffer {
+        if status_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
+            status_line = Some(&buffer[..index]);
+            snip = index;
+        }
+        if !status_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
+            headers = Some(&buffer[snip..index - prev.len()]);
+            break;
+        }
+        prev.remove(0);
+        prev.push(*char as char);
+        if index > buffer.len() {
+            return Err(ResponseError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
+        }
+        index += 1;
+    }
+    let status_line = str::from_utf8(&status_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
+
+    let (version, status_code, status_message) = (status_line[0], status_line[1], status_line[2]);
+    let header_string = str::from_utf8(&headers.unwrap()).unwrap();
+    let headers = parse_headers(header_string);
+
+    if header(&headers, "Content-Length").is_none() &&
+        header(&headers, "Transfer-Encoding").is_none() {
+        return Err(ResponseError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
+    }
+
+    // todo() support trailers
+
+    let mut body;
+    let content_length: Option<usize> = content_length_header(&headers);
+    match content_length {
+        Some(content_length) if content_length + index <= buffer.len() => {
+            let result = str::from_utf8(&buffer[index..(content_length + index)]).unwrap().to_string();
+            body = Body::BodyString(result)
+        }
+        Some(content_length) => {
+            let so_far = &buffer[index..buffer.len()];
+            let rest = stream.take(content_length as u64 - buffer.len() as u64);
+            body = Body::BodyStream(Box::new(so_far.chain(rest)));
+        }
+        _ => body = Body::BodyString("".to_string())
+    }
+
+    Ok(Response {
+        status: Status::from(status_code),
+        headers,
+        body
+    })
+}
+
 pub enum RequestError {
     NoContentLengthOrTransferEncoding(String),
-    HeadersTooBig(String)
+    HeadersTooBig(String),
+}
+
+pub enum ResponseError {
+    NoContentLengthOrTransferEncoding(String),
+    HeadersTooBig(String),
 }
 
 fn parse_headers(header_string: &str) -> Vec<Header> {
@@ -156,36 +218,6 @@ impl<'a> Response<'a> {
         }
         response.push_str("\r\n");
         response
-    }
-}
-
-impl<'a> Response<'a> {
-    pub fn from(str: String) -> Self {
-        let mut headers = vec!();
-        let split_by_crlf = str.split("\r\n").collect::<Vec<&str>>();
-        let http = split_by_crlf.first().unwrap().to_string();
-        let rest = &split_by_crlf[1..];
-        let mut index = 1;
-        for pair in rest {
-            // indicates start of body, which is preceded by two consecutive \r\n
-            if *pair == "" {
-                break;
-            }
-            index += 1;
-            let pair = pair.split(": ").collect::<Vec<&str>>();
-            let (name, value) = (pair.first(), pair.last());
-            headers.push((name.unwrap().to_string(), value.unwrap().to_string()));
-        }
-        let body = rest.get(index).unwrap();
-        let http = http.split(" ").collect::<Vec<&str>>();
-        let _version = http[0];
-        let status = http[1];
-
-        Response {
-            headers,
-            body: BodyString(body.to_string()),
-            status: Status::from(status),
-        }
     }
 }
 
@@ -298,8 +330,9 @@ impl Status {
         match self {
             OK => "OK".to_string(),
             NotFound => "Not Found".to_string(),
+            BadRequest => "Bad Request".to_string(),
             InternalServerError => "Internal Server Error".to_string(),
-            _ => "Internal Server Error".to_string()
+            _ => "Unknown".to_string()
         }
     }
     pub fn to_u32(&self) -> u32 {

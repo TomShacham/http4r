@@ -1,15 +1,16 @@
 use std::io::{copy, Error, Read, Write};
 use std::net::TcpStream;
 use std::{str};
+use std::any::Any;
 use std::ops::Deref;
-use crate::httpmessage::{add_header, body_length, header, headers_to_string, Request, Response};
+use crate::httpmessage::{add_header, bad_request, body_length, header, headers_to_string, Request, Response, response_from, ResponseError};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 
 impl Client {
-    pub fn handle(&self, req: Request) -> Response {
+    pub fn handle<F>(&self, req: Request, mut fun: F) -> Result<(), ResponseError>
+        where F: FnOnce(Response) -> Result<(), ResponseError> + Sized {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
-
         let mut request = Self::with_content_length(req);
         let request_string = format!("{} / HTTP/1.1\r\n{}\r\n\r\n", request.method.value(), headers_to_string(&request.headers));
 
@@ -26,11 +27,17 @@ impl Client {
         //todo() FIGURE OUT WHETHER TO CREATE A RESPONSE WITH A BODYSTREAM OR BODYSTRING,
         // DONT JUST READ INTO A BODYSTRING, ACTUALLY BASE IT ON THE CONTENT LENGTH HEADER?
         // TIME TO WRITE THE RESPONSE PARSER, LIKE THE REQUEST ONE THAT GOES THROUGH BYTE BY BYTE.
-        let mut buffer = [0; 4096];
+        let mut buffer = [0; 16384];
         stream.try_clone().unwrap().read(&mut buffer).unwrap();
 
-        let str1 = str::from_utf8(&buffer).unwrap();
-        Response::from(str1.to_string())
+        let result = response_from(&buffer, stream.try_clone().unwrap());
+
+        let mut response = match result {
+            Ok(res) => res,
+            _ => bad_request(vec!(), BodyString("nah".to_string()))
+        };
+
+        fun(response)
     }
 
     fn with_content_length(req: Request) -> Request {
