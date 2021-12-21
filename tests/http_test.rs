@@ -25,7 +25,6 @@ mod tests {
             assert_eq!("OK", response.status.to_string());
             assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
             assert_eq!("".to_string(), body_string(response.body));
-            Ok(())
         });
     }
 
@@ -53,6 +52,7 @@ mod tests {
     //    SHOULD respond with a 400 (Bad Request) response.
     //todo() handle set-cookie especially as multiple headers of this value cannot be combined
     // with commas
+
     #[test]
     fn gives_you_a_bodystream_if_entity_bigger_than_buffer() {
         let port = 7879;
@@ -72,9 +72,7 @@ mod tests {
                 BodyString(str) => panic!("Should not be BodyString"),
                 BodyStream(str) => assert!(true)
             }
-            Ok(())
         });
-
     }
 
     #[test]

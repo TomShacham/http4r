@@ -7,8 +7,8 @@ use crate::httpmessage::{add_header, bad_request, body_length, header, headers_t
 use crate::httpmessage::Body::{BodyStream, BodyString};
 
 impl Client {
-    pub fn handle<F>(&self, req: Request, mut fun: F) -> Result<(), ResponseError>
-        where F: FnOnce(Response) -> Result<(), ResponseError> + Sized {
+    pub fn handle<F>(&self, req: Request, mut fun: F) -> ()
+        where F: FnOnce(Response) -> () + Sized {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
         let mut request = Self::with_content_length(req);
