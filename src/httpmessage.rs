@@ -5,7 +5,7 @@ use std::ops::Index;
 use std::str;
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
-use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError, BadRequest, LengthRequired};
+use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError, BadRequest, LengthRequired, MovedPermanently};
 
 
 type Headers = Vec<Header>;
@@ -267,7 +267,7 @@ pub enum Method {
 }
 
 impl Method {
-    pub(crate) fn value(&self) -> String {
+    pub fn value(&self) -> String {
         match self {
             GET => String::from("GET"),
             POST => String::from("POST"),
@@ -305,6 +305,10 @@ pub fn not_found<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response
     Response { headers, body, status: NotFound }
 }
 
+pub fn moved_permanently<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+    Response { headers, body, status: MovedPermanently }
+}
+
 pub fn get<'a>(uri: String, headers: Vec<(String, String)>) -> Request<'a> {
     Request { method: GET, headers, body: BodyString("".to_string()), uri }
 }
@@ -318,6 +322,7 @@ pub fn post<'a>(uri: String, headers: Vec<(String, String)>, body: Body<'a>) -> 
 #[repr(u32)]
 pub enum Status {
     OK = 200,
+    MovedPermanently = 301,
     BadRequest = 400,
     LengthRequired = 411,
     NotFound = 404,
@@ -329,6 +334,7 @@ impl Status {
     pub fn to_string(&self) -> String {
         match self {
             OK => "OK".to_string(),
+            MovedPermanently => "Moved Permanently".to_string(),
             NotFound => "Not Found".to_string(),
             BadRequest => "Bad Request".to_string(),
             InternalServerError => "Internal Server Error".to_string(),

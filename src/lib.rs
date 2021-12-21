@@ -9,5 +9,8 @@ mod headers;
 pub mod server;
 pub mod httphandler;
 mod pool;
+pub mod LoggingHandler;
+pub mod handler;
+pub mod RedirectToHttpsHandler;
 
 
