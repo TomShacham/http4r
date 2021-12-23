@@ -1,7 +1,8 @@
 use std::io::{copy, Read, Write};
 use std::net::TcpStream;
 use crate::handler::Handler;
-use crate::httpmessage::{add_header, bad_request, body_length, header, headers_to_string, Request, Response, response_from};
+use crate::httpmessage;
+use crate::httpmessage::{add_header, bad_request, body_length, header, headers_to_string, message_from, Request, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 
 impl Handler for Client {
@@ -33,10 +34,10 @@ impl Handler for Client {
         let mut buffer = [0; 16384];
         let first_read = stream.try_clone().unwrap().read(&mut buffer).unwrap();
 
-        let result = response_from(&buffer, stream.try_clone().unwrap(), first_read);
+        let result = message_from(&buffer, stream.try_clone().unwrap(), first_read);
 
         let response = match result {
-            Ok(res) => res,
+            Ok(httpmessage::HttpMessage::Response(res)) => res,
             _ => bad_request(vec!(), BodyString("nah".to_string()))
         };
 

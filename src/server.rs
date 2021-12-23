@@ -2,7 +2,7 @@ use std::net::{TcpListener, TcpStream};
 use std::{thread};
 use std::io::{copy, Read, Write};
 use crate::httphandler::HttpHandler;
-use crate::httpmessage::{bad_request, length_required, Request, request_from, RequestError, Response};
+use crate::httpmessage::{bad_request, HttpMessage, length_required, message_from, MessageError, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 
@@ -21,7 +21,7 @@ impl Server {
         let call_handler = |mut stream: TcpStream, handler: HttpHandler| {
             let buffer = &mut [0 as u8; 16384];
             let first_read = stream.read(buffer).unwrap();
-            let result = request_from(buffer, stream.try_clone().unwrap(), first_read);
+            let result = message_from(buffer, stream.try_clone().unwrap(), first_read);
 
             Self::write_response(&mut stream, handler, result);
 
@@ -46,18 +46,21 @@ impl Server {
         }
     }
 
-    fn write_response(mut stream: &mut TcpStream, handler: HttpHandler, result: Result<Request, RequestError>) {
+    fn write_response(mut stream: &mut TcpStream, handler: HttpHandler, result: Result<HttpMessage, MessageError>) {
         match result {
-            Err(RequestError::HeadersTooBig(msg)) => {
+            Err(MessageError::HeadersTooBig(msg)) => {
                 let response = bad_request(vec!(), BodyString(msg));
                 Self::write_response_to_wire(&mut stream, response)
             },
-            Err(RequestError::NoContentLengthOrTransferEncoding(msg)) => {
+            Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
                 let response = length_required(vec!(), BodyString(msg));
                 Self::write_response_to_wire(&mut stream, response)
             },
-            Ok(request) => {
+            Ok(HttpMessage::Request(request)) => {
                 let response = handler(request);
+                Self::write_response_to_wire(&mut stream, response)
+            }
+            Ok(HttpMessage::Response(response)) => {
                 Self::write_response_to_wire(&mut stream, response)
             }
         }

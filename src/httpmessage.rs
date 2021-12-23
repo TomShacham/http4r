@@ -49,52 +49,38 @@ pub enum HttpMessage<'a> {
     Response(Response<'a>),
 }
 
-impl<'a> HttpMessage<'a> {
-    pub fn to_res(self) -> Response<'a> {
-        match self {
-            HttpMessage::Response(res) => res,
-            _ => panic!("Not a response")
-        }
-    }
-    pub fn to_req(self) -> Request<'a> {
-        match self {
-            HttpMessage::Request(req) => req,
-            _ => panic!("Not a request")
-        }
-    }
-}
 
-pub fn request_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<Request, RequestError> {
+pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<HttpMessage, MessageError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut pre_body_index = 0;
     let mut snip = 0;
-    let mut request_line = None;
+    let mut first_line = None;
     let mut headers = None;
     for char in buffer {
-        if request_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
-            request_line = Some(&buffer[..pre_body_index]);
+        if first_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
+            first_line = Some(&buffer[..pre_body_index]);
             snip = pre_body_index;
         }
-        if !request_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
+        if !first_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
             headers = Some(&buffer[snip..pre_body_index - prev.len()]);
             break;
         }
         prev.remove(0);
         prev.push(*char as char);
         if pre_body_index > buffer.len() {
-            return Err(RequestError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
+            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
         }
         pre_body_index += 1;
     }
-    let request_line = str::from_utf8(&request_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
+    let request_line = str::from_utf8(&first_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
 
-    let (method, uri, _http_version) = (request_line[0], request_line[1], request_line[2]);
+    let (part1, part2, _part3) = (request_line[0], request_line[1], request_line[2]);
     let header_string = str::from_utf8(&headers.unwrap()).unwrap();
     let headers = parse_headers(header_string);
 
     if header(&headers, "Content-Length").is_none() &&
         header(&headers, "Transfer-Encoding").is_none() {
-        return Err(RequestError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
+        return Err(MessageError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
     }
 
     // todo() support trailers
@@ -120,85 +106,24 @@ pub fn request_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
         _ => body = Body::BodyString("".to_string())
     }
 
-    let request = Request {
-        method: Method::from(method.to_string()),
-        uri: uri.to_string(),
-        headers,
-        body,
-    };
-    Ok(request)
-}
-
-pub fn response_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<Response, ResponseError> {
-    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
-    let mut pre_body_index = 0;
-    let mut snip = 0;
-    let mut status_line = None;
-    let mut headers = None;
-    for char in buffer {
-        if status_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
-            status_line = Some(&buffer[..pre_body_index]);
-            snip = pre_body_index;
-        }
-        if !status_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
-            headers = Some(&buffer[snip..pre_body_index - prev.len()]);
-            break;
-        }
-        prev.remove(0);
-        prev.push(*char as char);
-        if pre_body_index > buffer.len() {
-            return Err(ResponseError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
-        }
-        pre_body_index += 1;
+    if part1.starts_with("HTTP") {
+        Ok(HttpMessage::Response(Response {
+            status: Status::from(part2),
+            headers,
+            body
+        }))
+    } else {
+        Ok(HttpMessage::Request(Request {
+            method: Method::from(part1.to_string()),
+            uri: part2.to_string(),
+            headers,
+            body
+        }))
     }
-    let status_line = str::from_utf8(&status_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
-
-    let (_version, status_code, _status_message) = (status_line[0], status_line[1], status_line[2]);
-    let header_string = str::from_utf8(&headers.unwrap()).unwrap();
-    let headers = parse_headers(header_string);
-
-    if header(&headers, "Content-Length").is_none() &&
-        header(&headers, "Transfer-Encoding").is_none() {
-        return Err(ResponseError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
-    }
-
-    // todo() support trailers
-
-    let body;
-    let content_length = content_length_header(&headers);
-    match content_length {
-        Some(content_length) if content_length + pre_body_index <= buffer.len() => {
-            let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap().to_string();
-            body = Body::BodyString(result)
-        }
-        Some(content_length) => {
-            if first_read > pre_body_index {
-                let body_so_far = &buffer[pre_body_index..first_read];
-                let body_so_far_size = first_read - pre_body_index;
-                let rest = stream.take(content_length as u64 - body_so_far_size as u64);
-                body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
-            } else {
-                let body_stream = stream.take(content_length as u64);
-                body = Body::BodyStream(Box::new(body_stream));
-            }
-        }
-        _ => body = Body::BodyString("".to_string())
-    }
-
-    Ok(Response {
-        status: Status::from(status_code),
-        headers,
-        body
-    })
 }
 
 #[derive(Debug)]
-pub enum RequestError {
-    NoContentLengthOrTransferEncoding(String),
-    HeadersTooBig(String),
-}
-
-pub enum ResponseError {
+pub enum MessageError {
     NoContentLengthOrTransferEncoding(String),
     HeadersTooBig(String),
 }
