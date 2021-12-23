@@ -1,15 +1,9 @@
 use std::net::{TcpListener, TcpStream};
-use std::{str, thread};
-use std::borrow::Borrow;
+use std::{thread};
 use std::io::{copy, Read, Write};
-use std::ops::Deref;
-use std::sync::{Arc, mpsc, Mutex};
-use std::sync::mpsc::Receiver;
-use crate::headers::add_header;
 use crate::httphandler::HttpHandler;
-use crate::httpmessage::{bad_request, Body, content_length_header, get, header, HttpMessage, length_required, ok, Request, request_from, RequestError, Response};
+use crate::httpmessage::{bad_request, body_string, length_required, Request, request_from, RequestError, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
-use crate::pool::Message::NewJob;
 use crate::pool::ThreadPool;
 
 pub struct Server {}
@@ -25,11 +19,13 @@ impl Server {
         let listener = TcpListener::bind(addr).unwrap();
 
         let call_handler = |mut stream: TcpStream, handler: HttpHandler| {
-            let mut buffer = &mut [0 as u8; 16384];
-            stream.read(buffer).unwrap();
-            let result = request_from(buffer, stream.try_clone().unwrap());
+            let buffer = &mut [0 as u8; 16384];
+            let first_read = stream.read(buffer).unwrap();
+            let result = request_from(buffer, stream.try_clone().unwrap(), first_read);
 
             Self::write_response(&mut stream, handler, result);
+
+            stream.flush().unwrap();
         };
 
         match options.pool {
@@ -53,19 +49,18 @@ impl Server {
     fn write_response(mut stream: &mut TcpStream, handler: HttpHandler, result: Result<Request, RequestError>) {
         match result {
             Err(RequestError::HeadersTooBig(msg)) => {
-                let mut response = bad_request(vec!(), BodyString(msg));
+                let response = bad_request(vec!(), BodyString(msg));
                 Self::write_response_to_wire(&mut stream, response)
             },
             Err(RequestError::NoContentLengthOrTransferEncoding(msg)) => {
-                let mut response = length_required(vec!(), BodyString(msg));
+                let response = length_required(vec!(), BodyString(msg));
                 Self::write_response_to_wire(&mut stream, response)
             },
             Ok(request) => {
-                let mut response = handler(request);
+                let response = handler(request);
                 Self::write_response_to_wire(&mut stream, response)
             }
         }
-        stream.flush().unwrap();
     }
 
     fn write_response_to_wire(mut stream: &mut TcpStream, mut response: Response) {
@@ -74,11 +69,14 @@ impl Server {
         match response.body {
             BodyString(body_string) => {
                 returning.push_str(&body_string);
-                &stream.write(returning.as_bytes());
+                stream.write(returning.as_bytes()).unwrap();
             }
             BodyStream(ref mut body_stream) => {
-                &stream.write(returning.as_bytes());
-                copy(body_stream, &mut stream);
+                println!("writing stream response {}", returning);
+                let status_line_and_headers = stream.write(returning.as_bytes()).unwrap();
+                println!("wrote {} bytes, now copying response from server into tcp stream!", status_line_and_headers);
+                let copy = copy(body_stream, &mut stream).unwrap();
+                println!("copied {} bytes from server into tcp stream!", copy);
             }
         }
     }

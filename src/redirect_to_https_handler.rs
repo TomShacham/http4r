@@ -1,5 +1,4 @@
 use crate::handler::Handler;
-use crate::httphandler::HttpHandler;
 use crate::httpmessage::{moved_permanently, Request, Response};
 use crate::httpmessage::Body::BodyString;
 

@@ -1,7 +1,5 @@
-use std::borrow::Borrow;
 use std::io::Read;
 use std::net::TcpStream;
-use std::ops::Index;
 use std::str;
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
@@ -66,31 +64,31 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn request_from(buffer: &[u8], stream: TcpStream) -> Result<Request, RequestError> {
+pub fn request_from(buffer: &[u8], mut stream: TcpStream, first_read: usize) -> Result<Request, RequestError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
-    let mut index = 0;
+    let mut pre_body_index = 0;
     let mut snip = 0;
     let mut request_line = None;
     let mut headers = None;
     for char in buffer {
         if request_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
-            request_line = Some(&buffer[..index]);
-            snip = index;
+            request_line = Some(&buffer[..pre_body_index]);
+            snip = pre_body_index;
         }
         if !request_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
-            headers = Some(&buffer[snip..index - prev.len()]);
+            headers = Some(&buffer[snip..pre_body_index - prev.len()]);
             break;
         }
         prev.remove(0);
         prev.push(*char as char);
-        if index > buffer.len() {
+        if pre_body_index > buffer.len() {
             return Err(RequestError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
         }
-        index += 1;
+        pre_body_index += 1;
     }
     let request_line = str::from_utf8(&request_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
 
-    let (method, uri, http_version) = (request_line[0], request_line[1], request_line[2]);
+    let (method, uri, _http_version) = (request_line[0], request_line[1], request_line[2]);
     let header_string = str::from_utf8(&headers.unwrap()).unwrap();
     let headers = parse_headers(header_string);
 
@@ -101,17 +99,18 @@ pub fn request_from(buffer: &[u8], stream: TcpStream) -> Result<Request, Request
 
     // todo() support trailers
 
-    let mut body;
+    let body;
     let content_length: Option<usize> = content_length_header(&headers);
+    println!("request from content length {} {} {}, {}", content_length.unwrap(), pre_body_index, buffer.len(), content_length.unwrap() + pre_body_index <= buffer.len());
     match content_length {
-        Some(content_length) if content_length + index <= buffer.len() => {
-            let result = str::from_utf8(&buffer[index..(content_length + index)]).unwrap().to_string();
+        Some(content_length) if content_length + pre_body_index <= buffer.len() => {
+            let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap().to_string();
             body = Body::BodyString(result)
         }
         Some(content_length) => {
-            let so_far = &buffer[index..buffer.len()];
-            let rest = stream.take(content_length as u64 - buffer.len() as u64);
-            body = Body::BodyStream(Box::new(so_far.chain(rest)));
+            let body_stream = stream.take(content_length as u64);
+            println!("stream.take request {}", content_length);
+            body = Body::BodyStream(Box::new(body_stream));
         }
         _ => body = Body::BodyString("".to_string())
     }
@@ -125,31 +124,31 @@ pub fn request_from(buffer: &[u8], stream: TcpStream) -> Result<Request, Request
     Ok(request)
 }
 
-pub fn response_from(buffer: &[u8], stream: TcpStream) -> Result<Response, ResponseError> {
+pub fn response_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<Response, ResponseError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
-    let mut index = 0;
+    let mut pre_body_index = 0;
     let mut snip = 0;
     let mut status_line = None;
     let mut headers = None;
     for char in buffer {
         if status_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
-            status_line = Some(&buffer[..index]);
-            snip = index;
+            status_line = Some(&buffer[..pre_body_index]);
+            snip = pre_body_index;
         }
         if !status_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
-            headers = Some(&buffer[snip..index - prev.len()]);
+            headers = Some(&buffer[snip..pre_body_index - prev.len()]);
             break;
         }
         prev.remove(0);
         prev.push(*char as char);
-        if index > buffer.len() {
+        if pre_body_index > buffer.len() {
             return Err(ResponseError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
         }
-        index += 1;
+        pre_body_index += 1;
     }
     let status_line = str::from_utf8(&status_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
 
-    let (version, status_code, status_message) = (status_line[0], status_line[1], status_line[2]);
+    let (_version, status_code, _status_message) = (status_line[0], status_line[1], status_line[2]);
     let header_string = str::from_utf8(&headers.unwrap()).unwrap();
     let headers = parse_headers(header_string);
 
@@ -160,17 +159,26 @@ pub fn response_from(buffer: &[u8], stream: TcpStream) -> Result<Response, Respo
 
     // todo() support trailers
 
-    let mut body;
+    let body;
     let content_length: Option<usize> = content_length_header(&headers);
+    println!("first read {} vs headers {}", first_read, pre_body_index);
+    println!("response from content length {} {} {}, {}", content_length.unwrap(), pre_body_index, buffer.len(), content_length.unwrap() + pre_body_index <= buffer.len());
     match content_length {
-        Some(content_length) if content_length + index <= buffer.len() => {
-            let result = str::from_utf8(&buffer[index..(content_length + index)]).unwrap().to_string();
+        Some(content_length) if content_length + pre_body_index <= buffer.len() => {
+            let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap().to_string();
             body = Body::BodyString(result)
         }
         Some(content_length) => {
-            let so_far = &buffer[index..buffer.len()];
-            let rest = stream.take(content_length as u64 - buffer.len() as u64);
-            body = Body::BodyStream(Box::new(so_far.chain(rest)));
+            if first_read > pre_body_index {
+                let body_so_far = &buffer[pre_body_index..first_read];
+                let body_so_far_size = first_read - pre_body_index;
+                let rest = stream.take(content_length as u64 - body_so_far_size as u64);
+                body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
+            } else {
+                let body_stream = stream.take(content_length as u64);
+                println!("stream.take response {}", content_length);
+                body = Body::BodyStream(Box::new(body_stream));
+            }
         }
         _ => body = Body::BodyString("".to_string())
     }
@@ -182,6 +190,7 @@ pub fn response_from(buffer: &[u8], stream: TcpStream) -> Result<Response, Respo
     })
 }
 
+#[derive(Debug)]
 pub enum RequestError {
     NoContentLengthOrTransferEncoding(String),
     HeadersTooBig(String),
@@ -229,7 +238,7 @@ pub enum Body<'a> {
 pub fn body_length(body: &Body) -> u32 {
     match body {
         BodyString(str) => str.len() as u32,
-        BodyStream(stream) => panic!("Cannot find length of BodyStream, please provide Content-Length header")
+        BodyStream(_) => panic!("Cannot find length of BodyStream, please provide Content-Length header")
     }
 }
 
@@ -246,13 +255,15 @@ pub struct Response<'a> {
     pub status: Status,
 }
 
-pub fn body_string(body: Body) -> String {
+pub fn body_string(mut body: Body) -> String {
     match body {
         BodyString(str) => str,
-        BodyStream(mut tcp_stream) => {
-            let mut buffer: [u8; 4096] = [0; 4096];
-            tcp_stream.read(&mut buffer).unwrap();
-            str::from_utf8(&buffer).unwrap().to_string()
+        BodyStream(ref mut reader) => {
+            println!("turning body stream to string!");
+            let big = &mut Vec::new();
+            let read_bytes = reader.read_to_end(big).unwrap();
+            println!("read {} bytes in body_string!", read_bytes);
+            str::from_utf8(&big).unwrap().trim_end_matches(char::from(0)).to_string()
         }
     }
 }
@@ -289,23 +300,27 @@ impl Method {
     }
 }
 
-pub fn ok<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+pub fn ok(headers: Vec<(String, String)>, body: Body) -> Response {
     Response { headers, body, status: OK }
 }
 
-pub fn bad_request<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+pub fn bad_request(headers: Vec<(String, String)>, body: Body) -> Response {
     Response { headers, body, status: BadRequest }
 }
 
-pub fn length_required<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+pub fn internal_server_error(headers: Vec<(String, String)>, body: Body) -> Response {
+    Response { headers, body, status: InternalServerError }
+}
+
+pub fn length_required(headers: Vec<(String, String)>, body: Body) -> Response {
     Response { headers, body, status: LengthRequired }
 }
 
-pub fn not_found<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+pub fn not_found(headers: Vec<(String, String)>, body: Body) -> Response {
     Response { headers, body, status: NotFound }
 }
 
-pub fn moved_permanently<'a>(headers: Vec<(String, String)>, body: Body<'a>) -> Response<'a> {
+pub fn moved_permanently(headers: Vec<(String, String)>, body: Body) -> Response {
     Response { headers, body, status: MovedPermanently }
 }
 

@@ -1,19 +1,15 @@
-use rusty::httphandler::HttpHandler;
-use rusty::httpmessage::{moved_permanently, Request, Response};
-use rusty::httpmessage::Body::BodyString;
 use rusty::httpmessage::Status::{NotFound, OK};
 use rusty::handler::Handler;
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead, BufReader, Read, repeat};
+    use std::io::{Read, repeat};
     use rusty::client::Client;
     use rusty::httphandler::HttpHandler;
-    use rusty::httpmessage::{body_string, get, header, headers_to_string, not_found, ok, post, Request, Response, ResponseError};
+    use rusty::httpmessage::{body_string, get, headers_to_string, not_found, ok, post, Request, Response};
     use rusty::httpmessage::Body::{BodyStream, BodyString};
-    use rusty::LoggingHandler::LoggingHttpHandler;
-    use rusty::RedirectToHttpsHandler::RedirectToHttpsHandler;
-    use rusty::router::Router;
+    use rusty::logging_handler::LoggingHttpHandler;
+    use rusty::redirect_to_https_handler::RedirectToHttpsHandler;
     use rusty::server::{Server, ServerOptions};
     use super::*;
 
@@ -27,7 +23,8 @@ mod tests {
         Server::new(pass_through_req_handler, ServerOptions { port: Some(port), pool: None });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port };
         let request = get("/".to_string(), vec!());
-        let response = client.handle(request, |response: Response| {
+
+        client.handle(request, |response: Response| {
             assert_eq!("OK", response.status.to_string());
             assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
             assert_eq!("".to_string(), body_string(response.body));
@@ -40,18 +37,22 @@ mod tests {
         let pass_through_req_handler: HttpHandler = {
             |req: Request| { return ok(req.headers, req.body); }
         };
-        let buffer = repeat(1).take(20000);
+        let buffer = repeat(41).take(20000);
 
         Server::new(pass_through_req_handler, ServerOptions { port: Some(port), pool: None });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port };
-        let request = post("/".to_string(), vec!(("Content-Length".to_string(), 20000.to_string())), BodyStream(Box::new(buffer)));
-        let response = client.handle(request, |response| {
-            assert_eq!("OK", response.status.to_string());
-            assert_eq!("Content-Length: 20000", headers_to_string(&response.headers));
+        let post_with_stream_body = post("/".to_string(), vec!(("Content-Length".to_string(), 20000.to_string())), BodyStream(Box::new(buffer)));
 
+        client.handle(post_with_stream_body, |response| {
             match response.body {
-                BodyString(str) => panic!("Should not be BodyString"),
-                BodyStream(str) => assert!(true)
+                BodyString(_) => panic!("Should not be BodyString"),
+                BodyStream(s) => {
+                    let string = body_string(BodyStream(s));
+                    assert_eq!(20000, string.len());
+                    assert_eq!(string[0..10], "))))))))))".to_string());
+                    assert_eq!("OK", response.status.to_string());
+                    assert_eq!("Content-Length: 20000", headers_to_string(&response.headers));
+                }
             }
         });
     }
@@ -61,12 +62,12 @@ mod tests {
 
     #[test]
     fn router_non_http() {
-        let router: HttpHandler = (|req| {
+        let router: HttpHandler = |req| {
             match req.uri.as_str() {
                 "/" => ok(vec!(), BodyString("".to_string())),
                 _ => not_found(vec!(), BodyString("Not found".to_string())),
             }
-        });
+        };
         let request = get("/".to_string(), vec!());
         let request_to_no_route = get("no/route/here".to_string(), vec!());
 
@@ -76,13 +77,13 @@ mod tests {
 
     #[test]
     fn can_compose_http_handlers() {
-        let router: HttpHandler = (|req| {
+        let router: HttpHandler = |req| {
             match req.uri.as_str() {
                 "/" => ok(vec!(), BodyString("".to_string())),
                 _ => not_found(vec!(), BodyString("Not found".to_string())),
             }
-        });
-        let mut logger = LoggingHttpHandler::new(router);
+        };
+        let logger = LoggingHttpHandler::new(router);
         let mut redirector = RedirectToHttpsHandler::new(logger);
 
         let request = get("/".to_string(), vec!());
@@ -99,6 +100,7 @@ mod tests {
 
 
 //todo() DO NOT EXPECT A CONTENT LENGTH FOR HEAD,OPTIONS,CONNECT,204,1XX ETC
+//todo() test zero length body
 //todo() handle duplicate Content-lengths Content-Length: 42, 42
 //todo() handle both transfer encoding and content length as error
 // If a message is received with both a Transfer-Encoding and a

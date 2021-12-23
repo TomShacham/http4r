@@ -1,16 +1,12 @@
-use std::error::Error;
-use std::fs;
-
 pub mod client;
 pub mod filter;
 pub mod httpmessage;
 pub mod router;
-mod headers;
 pub mod server;
 pub mod httphandler;
 mod pool;
-pub mod LoggingHandler;
+pub mod logging_handler;
 pub mod handler;
-pub mod RedirectToHttpsHandler;
+pub mod redirect_to_https_handler;
 
 

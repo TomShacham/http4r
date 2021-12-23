@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use crate::handler::Handler;
 use crate::httphandler::HttpHandler;
 use crate::httpmessage::{Request, Response};
