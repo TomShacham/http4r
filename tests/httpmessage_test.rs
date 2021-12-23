@@ -1,14 +1,7 @@
-use rusty::httpmessage::Status::{NotFound, OK};
 
 #[cfg(test)]
 mod tests {
-    use rusty::client::Client;
-    use rusty::httphandler::HttpHandler;
-    use rusty::httpmessage::{add_header, body_string, get, header, ok, Request};
-    use rusty::httpmessage::Body::BodyString;
-    use rusty::router::Router;
-    use rusty::server::{Server};
-    use super::*;
+    use rusty::httpmessage::{add_header, header};
 
     #[test]
     fn get_header() {
@@ -17,6 +10,7 @@ mod tests {
                    Some(("foo".to_string(), "bar".to_string())));
     }
 
+    #[test]
     fn is_case_insensitive_and_preserves_case() {
         assert_eq!(header(&vec!(("fOo".to_string(), "bAr".to_string())), "Foo"),
                    Some(("fOo".to_string(), "bAr".to_string())));

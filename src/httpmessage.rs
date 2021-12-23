@@ -50,13 +50,13 @@ pub enum HttpMessage<'a> {
 }
 
 impl<'a> HttpMessage<'a> {
-    pub fn as_res(self) -> Response<'a> {
+    pub fn to_res(self) -> Response<'a> {
         match self {
             HttpMessage::Response(res) => res,
             _ => panic!("Not a response")
         }
     }
-    pub fn as_req(self) -> Request<'a> {
+    pub fn to_req(self) -> Request<'a> {
         match self {
             HttpMessage::Request(req) => req,
             _ => panic!("Not a request")
@@ -64,7 +64,7 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn request_from(buffer: &[u8], mut stream: TcpStream, first_read: usize) -> Result<Request, RequestError> {
+pub fn request_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<Request, RequestError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut pre_body_index = 0;
     let mut snip = 0;
@@ -100,17 +100,22 @@ pub fn request_from(buffer: &[u8], mut stream: TcpStream, first_read: usize) -> 
     // todo() support trailers
 
     let body;
-    let content_length: Option<usize> = content_length_header(&headers);
-    println!("request from content length {} {} {}, {}", content_length.unwrap(), pre_body_index, buffer.len(), content_length.unwrap() + pre_body_index <= buffer.len());
+    let content_length = content_length_header(&headers);
     match content_length {
         Some(content_length) if content_length + pre_body_index <= buffer.len() => {
             let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap().to_string();
             body = Body::BodyString(result)
         }
         Some(content_length) => {
-            let body_stream = stream.take(content_length as u64);
-            println!("stream.take request {}", content_length);
-            body = Body::BodyStream(Box::new(body_stream));
+            if first_read > pre_body_index {
+                let body_so_far = &buffer[pre_body_index..first_read];
+                let body_so_far_size = first_read - pre_body_index;
+                let rest = stream.take(content_length as u64 - body_so_far_size as u64);
+                body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
+            } else {
+                let body_stream = stream.take(content_length as u64);
+                body = Body::BodyStream(Box::new(body_stream));
+            }
         }
         _ => body = Body::BodyString("".to_string())
     }
@@ -160,9 +165,7 @@ pub fn response_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Res
     // todo() support trailers
 
     let body;
-    let content_length: Option<usize> = content_length_header(&headers);
-    println!("first read {} vs headers {}", first_read, pre_body_index);
-    println!("response from content length {} {} {}, {}", content_length.unwrap(), pre_body_index, buffer.len(), content_length.unwrap() + pre_body_index <= buffer.len());
+    let content_length = content_length_header(&headers);
     match content_length {
         Some(content_length) if content_length + pre_body_index <= buffer.len() => {
             let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap().to_string();
@@ -176,7 +179,6 @@ pub fn response_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Res
                 body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
             } else {
                 let body_stream = stream.take(content_length as u64);
-                println!("stream.take response {}", content_length);
                 body = Body::BodyStream(Box::new(body_stream));
             }
         }
@@ -259,10 +261,8 @@ pub fn body_string(mut body: Body) -> String {
     match body {
         BodyString(str) => str,
         BodyStream(ref mut reader) => {
-            println!("turning body stream to string!");
             let big = &mut Vec::new();
-            let read_bytes = reader.read_to_end(big).unwrap();
-            println!("read {} bytes in body_string!", read_bytes);
+            let _read_bytes = reader.read_to_end(big).unwrap();
             str::from_utf8(&big).unwrap().trim_end_matches(char::from(0)).to_string()
         }
     }

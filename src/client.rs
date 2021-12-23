@@ -15,9 +15,7 @@ impl Handler for Client {
         stream.write(request_string.as_bytes()).unwrap();
         match request.body {
             BodyStream(ref mut read) => {
-                println!("copying request body into tcp stream");
-                let copy = copy(read, &mut stream).unwrap();
-                println!("copied {} bytes to stream from request", copy);
+                let _copy = copy(read, &mut stream).unwrap();
             }
             BodyString(str) => {
                 stream.write(str.as_bytes()).unwrap();
@@ -33,7 +31,6 @@ impl Handler for Client {
         //todo() read and write timeouts
 
         let mut buffer = [0; 16384];
-        println!("reading response into buffer in client");
         let first_read = stream.try_clone().unwrap().read(&mut buffer).unwrap();
 
         let result = response_from(&buffer, stream.try_clone().unwrap(), first_read);

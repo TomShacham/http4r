@@ -37,7 +37,7 @@ mod tests {
         let pass_through_req_handler: HttpHandler = {
             |req: Request| { return ok(req.headers, req.body); }
         };
-        let buffer = repeat(41).take(20000);
+        let buffer = repeat(116).take(20000);
 
         Server::new(pass_through_req_handler, ServerOptions { port: Some(port), pool: None });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port };
@@ -49,7 +49,7 @@ mod tests {
                 BodyStream(s) => {
                     let string = body_string(BodyStream(s));
                     assert_eq!(20000, string.len());
-                    assert_eq!(string[0..10], "))))))))))".to_string());
+                    assert_eq!(string[0..10], "tttttttttt".to_string());
                     assert_eq!("OK", response.status.to_string());
                     assert_eq!("Content-Length: 20000", headers_to_string(&response.headers));
                 }

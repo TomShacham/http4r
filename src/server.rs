@@ -2,7 +2,7 @@ use std::net::{TcpListener, TcpStream};
 use std::{thread};
 use std::io::{copy, Read, Write};
 use crate::httphandler::HttpHandler;
-use crate::httpmessage::{bad_request, body_string, length_required, Request, request_from, RequestError, Response};
+use crate::httpmessage::{bad_request, length_required, Request, request_from, RequestError, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 
@@ -72,11 +72,8 @@ impl Server {
                 stream.write(returning.as_bytes()).unwrap();
             }
             BodyStream(ref mut body_stream) => {
-                println!("writing stream response {}", returning);
-                let status_line_and_headers = stream.write(returning.as_bytes()).unwrap();
-                println!("wrote {} bytes, now copying response from server into tcp stream!", status_line_and_headers);
-                let copy = copy(body_stream, &mut stream).unwrap();
-                println!("copied {} bytes from server into tcp stream!", copy);
+                let _status_line_and_headers = stream.write(returning.as_bytes()).unwrap();
+                let _copy = copy(body_stream, &mut stream).unwrap();
             }
         }
     }
