@@ -1,69 +1,58 @@
 use std::net::{TcpListener, TcpStream};
 use std::{thread};
 use std::io::{copy, Read, Write};
-use crate::httphandler::HttpHandler;
+use std::sync::Arc;
+use crate::handler::Handler;
 use crate::httpmessage::{bad_request, HttpMessage, length_required, message_from, MessageError, Response};
 use crate::httpmessage::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 
-pub struct Server {}
+pub struct Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'static {
+    next_handler: H,
+}
 
 pub struct ServerOptions {
     pub port: Option<u32>,
     pub pool: Option<ThreadPool>,
 }
 
-impl Server {
-    pub fn new(http_handler: HttpHandler, mut options: ServerOptions) {
+impl<H> Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'static {
+    pub fn new<F>(fun: F, mut options: ServerOptions)
+        where F: Fn() -> Result<H, String> + Send + Sync + 'static {
         let addr = format!("127.0.0.1:{}", options.port.get_or_insert(7878));
         let listener = TcpListener::bind(addr).unwrap();
+        let mut handler = Arc::new(fun);
 
-        let call_handler = |mut stream: TcpStream, handler: HttpHandler| {
-            let buffer = &mut [0 as u8; 16384];
-            let first_read = stream.read(buffer).unwrap();
-            let result = message_from(buffer, stream.try_clone().unwrap(), first_read);
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut arc = handler().unwrap();
+                let mut stream = stream.unwrap();
+                let buffer = &mut [0 as u8; 16384];
+                let first_read = stream.read(buffer).unwrap();
+                let result = message_from(buffer, stream.try_clone().unwrap(), first_read);
 
-            Self::write_response(&mut stream, handler, result);
-
-            stream.flush().unwrap();
-        };
-
-        match options.pool {
-            Some(thread_pool) => {
-                for stream in listener.incoming() {
-                    thread_pool.execute(move || {
-                        call_handler(stream.unwrap(), http_handler)
-                    });
-                }
-            }
-            _ => {
-                thread::spawn(move || {
-                    for stream in listener.incoming() {
-                        call_handler(stream.unwrap(), http_handler)
+                match result {
+                    Err(MessageError::HeadersTooBig(msg)) => {
+                        let response = bad_request(vec!(), BodyString(msg));
+                        Self::write_response_to_wire(&mut stream, response)
                     }
-                });
-            }
-        }
-    }
+                    Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
+                        let response = length_required(vec!(), BodyString(msg));
+                        Self::write_response_to_wire(&mut stream, response)
+                    }
+                    Ok(HttpMessage::Request(request)) => {
+                        arc.handle(request, |res| {
+                            Self::write_response_to_wire(&mut stream, res)
+                        });
+                    }
+                    Ok(HttpMessage::Response(response)) => {
+                        Self::write_response_to_wire(&mut stream, response)
+                    }
+                };
 
-    fn write_response(mut stream: &mut TcpStream, handler: HttpHandler, result: Result<HttpMessage, MessageError>) {
-        match result {
-            Err(MessageError::HeadersTooBig(msg)) => {
-                let response = bad_request(vec!(), BodyString(msg));
-                Self::write_response_to_wire(&mut stream, response)
-            },
-            Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
-                let response = length_required(vec!(), BodyString(msg));
-                Self::write_response_to_wire(&mut stream, response)
-            },
-            Ok(HttpMessage::Request(request)) => {
-                let response = handler(request);
-                Self::write_response_to_wire(&mut stream, response)
+                stream.flush().unwrap();
             }
-            Ok(HttpMessage::Response(response)) => {
-                Self::write_response_to_wire(&mut stream, response)
-            }
-        }
+        });
     }
 
     fn write_response_to_wire(mut stream: &mut TcpStream, mut response: Response) {
