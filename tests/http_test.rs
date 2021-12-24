@@ -8,7 +8,7 @@ mod tests {
     use std::io::{Read, repeat};
     use rusty::client::Client;
     use rusty::httphandler::HttpHandler;
-    use rusty::httpmessage::{body_string, get, headers_to_string, not_found, ok, post, Request, Response};
+    use rusty::httpmessage::{body_string, get, headers_to_string, not_found, ok, post, Response};
     use rusty::httpmessage::Body::{BodyStream, BodyString};
     use rusty::logging_handler::LoggingHttpHandler;
     use rusty::redirect_to_https_handler::RedirectToHttpsHandler;
@@ -87,6 +87,18 @@ mod tests {
         redirector.handle(request_to_no_route, |response| {
             assert_eq!(NotFound, response.status);
         });
+
+        //http
+        let port = 7880;
+        Server::new(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(Router{}))), ServerOptions {port: Some(port), pool: None});
+        let mut client = Client { base_uri: String::from("127.0.0.1"), port };
+        let request = get("/".to_string(), vec!());
+
+        client.handle(request, |response: Response| {
+            assert_eq!("OK", response.status.to_string());
+            assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
+            assert_eq!("".to_string(), body_string(response.body));
+        });
     }
 }
 
@@ -95,8 +107,8 @@ struct Router {}
 impl Handler for Router {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
         let response = match req.uri.as_str() {
-            "/" => ok(vec!(), BodyString("".to_string())),
-            _ => not_found(vec!(), BodyString("Not found".to_string())),
+            "/" => ok(vec!(("Content-Length".to_string(), 0.to_string())), BodyString("".to_string())),
+            _ => not_found(vec!(("Content-Length".to_string(), 9.to_string())), BodyString("Not found".to_string())),
         };
         fun(response)
     }

@@ -15,7 +15,7 @@
 - JSON body parser
 - proper semantics for methods ie. GET has no body etc.
 - bidi routing (can we do this without lenses?)
-
+- default response headers, content-type, content-length, date
 
 ### About
 

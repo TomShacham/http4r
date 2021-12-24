@@ -21,7 +21,7 @@ impl<H> Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'st
         where F: Fn() -> Result<H, String> + Send + Sync + 'static {
         let addr = format!("127.0.0.1:{}", options.port.get_or_insert(7878));
         let listener = TcpListener::bind(addr).unwrap();
-        let mut handler = Arc::new(fun);
+        let handler = Arc::new(fun);
 
         thread::spawn(move || {
             for stream in listener.incoming() {
