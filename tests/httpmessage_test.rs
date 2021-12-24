@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod tests {
-    use rusty::httpmessage::{add_header, header};
+    use rusty::http_message::{add_header, header};
 
     #[test]
     fn get_header() {

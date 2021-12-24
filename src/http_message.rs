@@ -1,9 +1,9 @@
 use std::io::Read;
 use std::net::TcpStream;
 use std::str;
-use crate::httpmessage::Body::{BodyStream, BodyString};
-use crate::httpmessage::Method::{DELETE, GET, OPTIONS, PATCH, POST};
-use crate::httpmessage::Status::{NotFound, OK, Unknown, InternalServerError, BadRequest, LengthRequired, MovedPermanently};
+use crate::http_message::Body::{BodyStream, BodyString};
+use crate::http_message::Method::{DELETE, GET, OPTIONS, PATCH, POST};
+use crate::http_message::Status::{NotFound, OK, Unknown, InternalServerError, BadRequest, LengthRequired, MovedPermanently};
 
 
 type Headers = Vec<Header>;
@@ -48,7 +48,20 @@ pub enum HttpMessage<'a> {
     Request(Request<'a>),
     Response(Response<'a>),
 }
-
+impl<'a> HttpMessage<'a> {
+    pub fn to_req(self) -> Request<'a> {
+        match self {
+            HttpMessage::Request(req) => req,
+            _ => panic!("Not a request!")
+        }
+    }
+    pub fn to_res(self) -> Response<'a> {
+        match self {
+            HttpMessage::Response(res) => res,
+            _ => panic!("Not a request!")
+        }
+    }
+}
 
 pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<HttpMessage, MessageError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
@@ -110,14 +123,14 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
         Ok(HttpMessage::Response(Response {
             status: Status::from(part2),
             headers,
-            body
+            body,
         }))
     } else {
         Ok(HttpMessage::Request(Request {
             method: Method::from(part1.to_string()),
             uri: part2.to_string(),
             headers,
-            body
+            body,
         }))
     }
 }
@@ -166,6 +179,31 @@ pub fn body_length(body: &Body) -> u32 {
     match body {
         BodyString(str) => str.len() as u32,
         BodyStream(_) => panic!("Cannot find length of BodyStream, please provide Content-Length header")
+    }
+}
+
+pub fn with_content_length(message: HttpMessage) -> HttpMessage {
+    match message {
+        HttpMessage::Request(request) => {
+            if header(&request.headers, "Content-Length").is_none() {
+                return HttpMessage::Request(Request {
+                    headers: add_header(&request.headers, ("Content-Length".to_string(), body_length(&request.body).to_string())),
+                    ..request
+                });
+            } else {
+                HttpMessage::Request(request)
+            }
+        }
+        HttpMessage::Response(response) => {
+            if header(&response.headers, "Content-Length").is_none() {
+                return HttpMessage::Response(Response {
+                    headers: add_header(&response.headers, ("Content-Length".to_string(), body_length(&response.body).to_string())),
+                    ..response
+                });
+            } else {
+                HttpMessage::Response(response)
+            }
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::handler::Handler;
-use crate::httpmessage::{moved_permanently, Request, Response};
-use crate::httpmessage::Body::BodyString;
+use crate::http_message::{moved_permanently, Request, Response};
+use crate::http_message::Body::BodyString;
 
 pub struct RedirectToHttpsHandler<H> where H: Handler {
     next_handler: H,

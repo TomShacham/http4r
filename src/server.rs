@@ -3,8 +3,8 @@ use std::{thread};
 use std::io::{copy, Read, Write};
 use std::sync::Arc;
 use crate::handler::Handler;
-use crate::httpmessage::{bad_request, HttpMessage, length_required, message_from, MessageError, Response};
-use crate::httpmessage::Body::{BodyStream, BodyString};
+use crate::http_message::{bad_request, HttpMessage, length_required, message_from, MessageError, Response, with_content_length};
+use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 
 pub struct Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'static {
@@ -56,6 +56,7 @@ impl<H> Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'st
     }
 
     fn write_response_to_wire(mut stream: &mut TcpStream, mut response: Response) {
+        let mut response = with_content_length(HttpMessage::Response(response)).to_res();
         let mut returning: String = response.resource_and_headers();
 
         match response.body {

@@ -1,15 +1,14 @@
-use rusty::httpmessage::Status::{NotFound, OK};
+use rusty::http_message::Status::{NotFound, OK};
 use rusty::handler::Handler;
-use rusty::httpmessage::{not_found, ok, Request, Response};
-use rusty::httpmessage::Body::BodyString;
+use rusty::http_message::{not_found, ok, Request, Response};
+use rusty::http_message::Body::BodyString;
 
 #[cfg(test)]
 mod tests {
     use std::io::{Read, repeat};
     use rusty::client::Client;
-    use rusty::httphandler::HttpHandler;
-    use rusty::httpmessage::{body_string, get, headers_to_string, not_found, ok, post, Response};
-    use rusty::httpmessage::Body::{BodyStream, BodyString};
+    use rusty::http_message::{body_string, get, headers_to_string, post, Response};
+    use rusty::http_message::Body::{BodyStream, BodyString};
     use rusty::logging_handler::LoggingHttpHandler;
     use rusty::redirect_to_https_handler::RedirectToHttpsHandler;
     use rusty::server::{Server, ServerOptions};
@@ -56,22 +55,6 @@ mod tests {
     fn client_must_provide_content_length_or_else_transfer_encoding_is_chunked_if_entity_big() {}
 
     #[test]
-    fn router_non_http() {
-        let router: HttpHandler = |req| {
-            match req.uri.as_str() {
-                "/" => ok(vec!(), BodyString("".to_string())),
-                _ => not_found(vec!(), BodyString("Not found".to_string())),
-            }
-        };
-        let request = get("/".to_string(), vec!());
-        let request_to_no_route = get("no/route/here".to_string(), vec!());
-
-        assert_eq!(OK, router(request).status.into());
-        assert_eq!(NotFound, router(request_to_no_route).status);
-    }
-
-
-    #[test]
     fn can_compose_http_handlers() {
         let router = Router{};
         let logger = LoggingHttpHandler::new(router);
@@ -107,8 +90,8 @@ struct Router {}
 impl Handler for Router {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
         let response = match req.uri.as_str() {
-            "/" => ok(vec!(("Content-Length".to_string(), 0.to_string())), BodyString("".to_string())),
-            _ => not_found(vec!(("Content-Length".to_string(), 9.to_string())), BodyString("Not found".to_string())),
+            "/" => ok(vec!(), BodyString("".to_string())),
+            _ => not_found(vec!(), BodyString("Not found".to_string())),
         };
         fun(response)
     }

@@ -1,6 +1,6 @@
 use std::time::{Instant};
 use crate::handler::Handler;
-use crate::httpmessage::{Request, Response};
+use crate::http_message::{Request, Response};
 
 pub struct LoggingHttpHandler<H> where H: Handler {
     pub log: Vec<String>,
