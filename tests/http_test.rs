@@ -131,3 +131,4 @@ impl Handler for PassThroughHandler {
 //todo() handle set-cookie especially as multiple headers of this value cannot be combined
 // with commas
 //todo() get doesnt send body etc - all the method semantics
+//todo() allow header for 405 method not allowed

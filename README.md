@@ -3,8 +3,16 @@
 ### To do
 
 - Prove out concept of SaaF in the browser using WASM
+- build script that includes wasm-pack
+- write html file handler with appropriate content-type headers and serve 
+local webpage that loads in wasm app and runs tests
+  - even better, do this as puppeteer suite
+  
 ---
+- Split out into monorepo
+  - core api, routing, bidi etc
 - Proper Uri
+- Split server new and handle
 - Res status message
 - http version on message
 - support http/1.0 - ie. read til socket close

@@ -23,12 +23,6 @@ impl Handler for Client {
             }
         }
 
-        //todo() FIGURE OUT WHETHER TO CREATE A RESPONSE WITH A BODYSTREAM OR BODYSTRING,
-        // DONT JUST READ INTO A BODYSTRING, ACTUALLY BASE IT ON THE CONTENT LENGTH HEADER?
-        // TIME TO WRITE THE RESPONSE PARSER, LIKE THE REQUEST ONE THAT GOES THROUGH BYTE BY BYTE.
-        // we can look at the content length header if http/1.1 otherwise we wait for EOF or conn close
-        // or else it's transfer encoding chunked and we deal with that
-
         //todo() read and write timeouts
 
         let mut buffer = [0; 16384];

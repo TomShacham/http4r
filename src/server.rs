@@ -3,12 +3,15 @@ use std::{thread};
 use std::io::{copy, Read, Write};
 use std::sync::Arc;
 use crate::handler::Handler;
-use crate::http_message::{bad_request, HttpMessage, length_required, message_from, MessageError, Response, with_content_length};
+use crate::http_message::{bad_request, body_string, HttpMessage, length_required, message_from, MessageError, Method, Request, Response, with_content_length};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
+use wasm_bindgen::prelude::*;
+use crate::logging_handler::LoggingHttpHandler;
+use crate::router::Router;
 
-pub struct Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'static {
-    next_handler: H,
+pub struct Server<H> where H: Handler + Sync + Send + 'static {
+    _next_handler: H,
 }
 
 pub struct ServerOptions {
@@ -16,7 +19,7 @@ pub struct ServerOptions {
     pub pool: Option<ThreadPool>,
 }
 
-impl<H> Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'static {
+impl<H> Server<H> where H: Handler + Sync + Send + 'static {
     pub fn new<F>(fun: F, mut options: ServerOptions)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static {
         let addr = format!("127.0.0.1:{}", options.port.get_or_insert(7878));
@@ -55,7 +58,7 @@ impl<H> Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'st
         });
     }
 
-    fn write_response_to_wire(mut stream: &mut TcpStream, mut response: Response) {
+    fn write_response_to_wire(mut stream: &mut TcpStream, response: Response) {
         let mut response = with_content_length(HttpMessage::Response(response)).to_res();
         let mut returning: String = response.resource_and_headers();
 
@@ -72,3 +75,65 @@ impl<H> Server<H> where H: Handler + std::marker::Sync + std::marker::Send + 'st
     }
 }
 
+#[wasm_bindgen]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JSRequest {
+    uri: String,
+    body: String,
+    method: String,
+    headers: Vec<(String, String)>,
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JSResponse {
+    body: String,
+    status: String,
+    headers: Vec<(String, String)>,
+}
+
+#[wasm_bindgen]
+pub fn serve(req: JSRequest) -> JSResponse {
+    let mut app = RustyApp::new(LoggingHttpHandler::new(Router {}));
+    let request = Request {
+        headers: req.headers,
+        method: Method::from(req.method),
+        uri: req.uri,
+        body: BodyString(req.body),
+    };
+    let mut response = JSResponse {
+        body: "Not found".to_string(),
+        headers: vec!(),
+        status: "404".to_string(),
+    };
+    app.handle(request, |res| {
+        response = JSResponse {
+            body: body_string(res.body),
+            status: res.status.to_string(),
+            headers: res.headers,
+        }
+    });
+    response
+}
+
+pub struct RustyApp<H> where H: Handler {
+    next_handler: H,
+}
+
+impl<H> RustyApp<H> where H: Handler {
+    pub fn new(next_handler: H) -> RustyApp<H> {
+        RustyApp {
+            next_handler
+        }
+    }
+}
+
+impl<H> Handler for RustyApp<H> where H: Handler {
+    fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        println!("App start");
+        self.next_handler.handle(req, |res| {
+            fun(res);
+            println!("App end")
+        })
+    }
+}

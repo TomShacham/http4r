@@ -1,14 +1,15 @@
+use crate::handler::Handler;
 use crate::http_message;
 use crate::http_message::{Request, Response};
 use crate::http_message::Body::BodyString;
 
 pub struct Router {}
 
-impl Router {
-    pub fn handle(&self, req: Request) -> Response {
+impl Handler for Router {
+    fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
         match req.uri.as_str() {
-            "/" => http_message::ok(vec!(), BodyString("".to_string())),
-            _ => http_message::not_found(vec!(), BodyString("Not found".to_string())),
+            "/" => fun(http_message::ok(vec!(), BodyString("".to_string()))),
+            _ => fun(http_message::not_found(vec!(), BodyString("Not found".to_string()))),
         }
     }
 }
