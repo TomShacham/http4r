@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -x
+
+echo building WASM
+wasm-pack --verbose build --target web
+
+echo build and test
+cargo test
+
