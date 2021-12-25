@@ -4,6 +4,8 @@
 
 - Prove out concept of SaaF in the browser using WASM
 - build script that includes wasm-pack
+- support chrono so that times work? why doesnt time work
+- make monorepo and split out subproject for wasm-example
 - write html file handler with appropriate content-type headers and serve 
 local webpage that loads in wasm app and runs tests
   - even better, do this as puppeteer suite

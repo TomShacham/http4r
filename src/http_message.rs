@@ -157,7 +157,7 @@ pub fn content_length_header(headers: &Vec<Header>) -> Option<usize> {
 impl<'a> Response<'a> {
     pub fn resource_and_headers(&self) -> String {
         let mut response = String::new();
-        let http = format!("HTTP/1.1 {} {}", &self.status.to_string(), &self.status.to_u32());
+        let http = format!("HTTP/1.1 {} {}", &self.status.to_string(), &self.status.value());
         response.push_str(&http);
         response.push_str("\r\n");
         for (name, value) in &self.headers {
@@ -319,9 +319,11 @@ impl Status {
             _ => "Unknown".to_string()
         }
     }
-    pub fn to_u32(&self) -> u32 {
+    pub fn value(&self) -> u32 {
         match self {
             OK => 200,
+            MovedPermanently => 301,
+            BadRequest => 400,
             NotFound => 404,
             InternalServerError => 500,
             _ => 500

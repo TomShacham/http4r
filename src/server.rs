@@ -7,8 +7,9 @@ use crate::http_message::{bad_request, body_string, HttpMessage, length_required
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 use wasm_bindgen::prelude::*;
-use crate::logging_handler::LoggingHttpHandler;
 use crate::router::Router;
+extern crate console_error_panic_hook;
+use std::panic;
 
 pub struct Server<H> where H: Handler + Sync + Send + 'static {
     _next_handler: H,
@@ -76,27 +77,47 @@ impl<H> Server<H> where H: Handler + Sync + Send + 'static {
 }
 
 #[wasm_bindgen]
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JSRequest {
     uri: String,
     body: String,
     method: String,
-    headers: Vec<(String, String)>,
+    // headers: Vec<(String, String)>,
 }
 
 #[wasm_bindgen]
-#[derive(Clone, Debug, PartialEq, Eq)]
+pub fn jsRequest(uri: &str, body: &str, method: &str) -> JSRequest {
+    // let headers = headers.split("; ").fold(vec!(), |mut acc: Vec<(String, String)>, next: &str| {
+    //     let mut split = next.split(": ");
+    //     acc.push((split.next().unwrap().to_string(), split.next().unwrap().to_string()));
+    //     acc
+    // });
+    return JSRequest{
+        uri: uri.to_string(), body: body.to_string(), method: method.to_string()
+    }
+}
+
+#[wasm_bindgen]
 pub struct JSResponse {
     body: String,
-    status: String,
+    status: u32,
     headers: Vec<(String, String)>,
+}
+#[wasm_bindgen]
+impl JSResponse {
+    pub fn body(&self) -> String {
+        (&self.body).to_string()
+    }
+    pub fn status(&self) -> String {
+        (&self.status).to_string()
+    }
 }
 
 #[wasm_bindgen]
 pub fn serve(req: JSRequest) -> JSResponse {
-    let mut app = RustyApp::new(LoggingHttpHandler::new(Router {}));
+    panic::set_hook(Box::new(console_error_panic_hook::hook));
+    let mut app = RustyApp::new(Router {});
     let request = Request {
-        headers: req.headers,
+        headers: vec!(),
         method: Method::from(req.method),
         uri: req.uri,
         body: BodyString(req.body),
@@ -104,12 +125,12 @@ pub fn serve(req: JSRequest) -> JSResponse {
     let mut response = JSResponse {
         body: "Not found".to_string(),
         headers: vec!(),
-        status: "404".to_string(),
+        status: 404,
     };
     app.handle(request, |res| {
         response = JSResponse {
             body: body_string(res.body),
-            status: res.status.to_string(),
+            status: res.status.value(),
             headers: res.headers,
         }
     });

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Browser tests</title>
+    <script type="module" src="../pkg/rusty.js"></script>
+    <script type="module">
+        import init, {serve, jsRequest} from '../pkg/rusty.js';
+        async function run() {
+            await init();
+            let request = jsRequest("", "/", "GET");
+            console.log(request);
+            let response = await serve(request);
+            console.log(response.status(), response.body());
+        }
+
+        run();
+    </script>
+</head>
+<body>
+
+</body>
+</html>
