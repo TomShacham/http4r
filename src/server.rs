@@ -10,6 +10,7 @@ use wasm_bindgen::prelude::*;
 use crate::router::Router;
 extern crate console_error_panic_hook;
 use std::panic;
+use crate::logging_handler::{ConsoleLogger, LoggingHttpHandler, WasmClock};
 
 pub struct Server<H> where H: Handler + Sync + Send + 'static {
     _next_handler: H,
@@ -122,7 +123,7 @@ impl JSResponse {
 #[wasm_bindgen]
 pub fn serve(req: JSRequest) -> JSResponse {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    let mut app = RustyApp::new(Router {});
+    let mut app = RustyApp::new(LoggingHttpHandler::new(ConsoleLogger{}, WasmClock {}, Router {}));
     let request = Request {
         headers: js_headers_from_string(&req.headers),
         method: Method::from(req.method),

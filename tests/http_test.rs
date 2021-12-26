@@ -9,7 +9,7 @@ mod tests {
     use rusty::client::Client;
     use rusty::http_message::{body_string, get, headers_to_string, post, Response};
     use rusty::http_message::Body::{BodyStream, BodyString};
-    use rusty::logging_handler::LoggingHttpHandler;
+    use rusty::logging_handler::{WasmClock, LoggingHttpHandler, RustLogger};
     use rusty::redirect_to_https_handler::RedirectToHttpsHandler;
     use rusty::server::{Server, ServerOptions};
     use super::*;
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn can_compose_http_handlers() {
         let router = Router{};
-        let logger = LoggingHttpHandler::new(router);
+        let logger = LoggingHttpHandler::new(RustLogger{}, WasmClock {}, router);
         let mut redirector = RedirectToHttpsHandler::new(logger);
 
         let request = get("/".to_string(), vec!());
@@ -73,7 +73,7 @@ mod tests {
 
         //http
         let port = 7880;
-        Server::new(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(Router{}))), ServerOptions {port: Some(port), pool: None});
+        Server::new(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger{}, WasmClock {}, Router{}))), ServerOptions {port: Some(port), pool: None});
         let mut client = Client { base_uri: String::from("127.0.0.1"), port };
         let request = get("/".to_string(), vec!());
 
