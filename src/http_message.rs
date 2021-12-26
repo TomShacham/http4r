@@ -17,6 +17,22 @@ pub fn header(headers: &Headers, name: &str) -> Option<Header> {
     None
 }
 
+pub fn js_headers_from_string(str: &str) -> Headers {
+    str.split("; ").fold(vec!(), |mut acc: Vec<(String, String)>, next: &str| {
+        let mut split = next.split(": ");
+        acc.push((split.next().unwrap().to_string(), split.next().unwrap().to_string()));
+        acc
+    })
+}
+
+pub fn js_headers_to_string(headers: &Headers) -> String {
+    headers.iter().map(|h| {
+        let clone = h.clone();
+        clone.0 + ": " + clone.1.as_str()
+    }).collect::<Vec<String>>()
+        .join("; ")
+}
+
 pub fn headers_to_string(headers: &Headers) -> String {
     headers.iter().map(|h| {
         let clone = h.clone();

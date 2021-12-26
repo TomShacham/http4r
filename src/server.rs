@@ -3,7 +3,7 @@ use std::{thread};
 use std::io::{copy, Read, Write};
 use std::sync::Arc;
 use crate::handler::Handler;
-use crate::http_message::{bad_request, body_string, HttpMessage, length_required, message_from, MessageError, Method, Request, Response, with_content_length};
+use crate::http_message::{bad_request, body_string, js_headers_from_string, HttpMessage, length_required, message_from, MessageError, Method, Request, Response, with_content_length, js_headers_to_string};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 use wasm_bindgen::prelude::*;
@@ -81,18 +81,22 @@ pub struct JSRequest {
     uri: String,
     body: String,
     method: String,
-    // headers: Vec<(String, String)>,
+    headers: String,
 }
 
+#[allow(non_snake_case)]
 #[wasm_bindgen]
-pub fn jsRequest(uri: &str, body: &str, method: &str) -> JSRequest {
-    // let headers = headers.split("; ").fold(vec!(), |mut acc: Vec<(String, String)>, next: &str| {
-    //     let mut split = next.split(": ");
-    //     acc.push((split.next().unwrap().to_string(), split.next().unwrap().to_string()));
-    //     acc
-    // });
+pub fn jsRequest(method: &str, uri: &str, body: &str, headers: &str) -> JSRequest {
+    let headers = headers.split("; ").fold(vec!(), |mut acc: Vec<(String, String)>, next: &str| {
+        let mut split = next.split(": ");
+        acc.push((split.next().unwrap().to_string(), split.next().unwrap().to_string()));
+        acc
+    });
     return JSRequest{
-        uri: uri.to_string(), body: body.to_string(), method: method.to_string()
+        method: method.to_string(),
+        uri: uri.to_string(),
+        body: body.to_string(),
+        headers: js_headers_to_string(&headers)
     }
 }
 
@@ -100,7 +104,7 @@ pub fn jsRequest(uri: &str, body: &str, method: &str) -> JSRequest {
 pub struct JSResponse {
     body: String,
     status: u32,
-    headers: Vec<(String, String)>,
+    headers: String,
 }
 #[wasm_bindgen]
 impl JSResponse {
@@ -110,6 +114,9 @@ impl JSResponse {
     pub fn status(&self) -> String {
         (&self.status).to_string()
     }
+    pub fn headers(&self) -> String {
+        (&self.headers).to_string()
+    }
 }
 
 #[wasm_bindgen]
@@ -117,21 +124,21 @@ pub fn serve(req: JSRequest) -> JSResponse {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
     let mut app = RustyApp::new(Router {});
     let request = Request {
-        headers: vec!(),
+        headers: js_headers_from_string(&req.headers),
         method: Method::from(req.method),
         uri: req.uri,
         body: BodyString(req.body),
     };
     let mut response = JSResponse {
         body: "Not found".to_string(),
-        headers: vec!(),
+        headers: "Content-Type: text/plain".to_string(),
         status: 404,
     };
     app.handle(request, |res| {
         response = JSResponse {
             body: body_string(res.body),
             status: res.status.value(),
-            headers: res.headers,
+            headers: js_headers_to_string(&res.headers),
         }
     });
     response

@@ -8,10 +8,14 @@
         import init, {serve, jsRequest} from '../pkg/rusty.js';
         async function run() {
             await init();
-            let request = jsRequest("", "/", "GET");
-            console.log(request);
+            let request = jsRequest("GET", "/", "body", "X-Tom: Cool beans; Cache-Control: private, max-age:0");
             let response = await serve(request);
-            console.log(response.status(), response.body());
+            const jsResponse = {
+                status: response.status(),
+                body: response.body(),
+                headers: response.headers().split("; ").map(string => string.split(": "))
+            }
+            console.log(jsResponse);
         }
 
         run();

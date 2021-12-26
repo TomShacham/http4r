@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod tests {
-    use rusty::http_message::{add_header, header};
+    use rusty::http_message::{add_header, header, js_headers_from_string, js_headers_to_string};
 
     #[test]
     fn get_header() {
@@ -30,5 +30,21 @@ mod tests {
 
         assert_eq!(add_header(&added_again, ("foo".to_string(), "quux".to_string())),
                    vec!(("foo".to_string(), "bar, baz, quux".to_string())));
+    }
+
+    #[test]
+    fn parse_js_headers_from_string() {
+        let headers = js_headers_from_string("Content-Length: 10; Content-Type: text/html");
+
+        assert_eq!(header(&headers, "Content-Length").unwrap(), ("Content-Length".to_string(), "10".to_string()));
+        assert_eq!(header(&headers, "Content-Type").unwrap(), ("Content-Type".to_string(), "text/html".to_string()))
+    }
+
+    #[test]
+    fn parse_js_headers_to_string() {
+        let headers = vec!(("Content-Type".to_string(), "text/plain".to_string()), ("Content-Length".to_string(), "10".to_string()));
+        let string = js_headers_to_string(&headers);
+
+        assert_eq!(string, "Content-Type: text/plain; Content-Length: 10");
     }
 }
