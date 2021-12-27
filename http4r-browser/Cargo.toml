@@ -1,0 +1,17 @@
+[package]
+name = "http4r-browser"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+http4r-core = { path = "../http4r-core" }
+wasm-bindgen = "0.2.78"
+console_error_panic_hook = "0.1.7"
+instant = { version = "0.1.12", features = [ "wasm-bindgen", "inaccurate" ] }
+web-sys = { version = "0.3.55", features = ["console"] }
+js-sys = { version = "0.3.55" }

@@ -1,16 +1,6 @@
-[package]
-name = "rusty"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[dependencies]
-wasm-bindgen = "0.2.78"
-console_error_panic_hook = "0.1.7"
-instant = { version = "0.1.12", features = [ "wasm-bindgen", "inaccurate" ] }
-web-sys = { version = "0.3.55", features = ["console"] }
-js-sys = { version = "0.3.55" }
+members = [
+    "http4r-core",
+    "http4r-browser",
+]

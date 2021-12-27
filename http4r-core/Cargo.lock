@@ -25,25 +25,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http4r-browser"
-version = "0.0.1"
-dependencies = [
- "console_error_panic_hook",
- "http4r-core",
- "instant",
- "js-sys",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
-name = "http4r-core"
-version = "0.1.0"
-dependencies = [
- "instant",
-]
-
-[[package]]
 name = "instant"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -98,10 +79,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "http4r_core"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "instant",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "syn"
-version = "1.0.84"
+version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecb2e6da8ee5eb9a61068762a32fa9619cc591ceb055b3687f4cd4051ec2e06b"
+checksum = "23a1dfb999630e338648c83e91c59a4e9fb7620f520c3194b6b89e276f2f1959"
 dependencies = [
  "proc-macro2",
  "quote",
