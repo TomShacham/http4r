@@ -11,13 +11,13 @@ mod tests {
     use http4r_core::http_message::Body::{BodyStream, BodyString};
     use http4r_core::logging_handler::{WasmClock, LoggingHttpHandler, RustLogger};
     use http4r_core::redirect_to_https_handler::RedirectToHttpsHandler;
-    use http4r_core::server::{Server, ServerOptions};
+    use http4r_core::server::{Server};
     use super::*;
 
     #[test]
     fn client_over_http_get() {
         let port = 7878;
-        Server::new(||{Ok(PassThroughHandler {})}, ServerOptions { port: Some(port), pool: None });
+        Server::test(||{Ok(PassThroughHandler {})}, Some(port));
         let mut client = Client { base_uri: String::from("127.0.0.1"), port };
         let request = get("/".to_string(), vec!());
 
@@ -33,7 +33,7 @@ mod tests {
         let port = 7879;
         let buffer = repeat(116).take(20000);
 
-        Server::new(||{Ok(PassThroughHandler {})}, ServerOptions { port: Some(port), pool: None });
+        Server::test(||{Ok(PassThroughHandler {})}, Some(port));
         let mut client = Client { base_uri: String::from("127.0.0.1"), port };
         let post_with_stream_body = post("/".to_string(), vec!(("Content-Length".to_string(), 20000.to_string())), BodyStream(Box::new(buffer)));
 
@@ -73,7 +73,7 @@ mod tests {
 
         //http
         let port = 7880;
-        Server::new(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger{}, WasmClock {}, Router{}))), ServerOptions {port: Some(port), pool: None});
+        Server::test(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger{}, WasmClock {}, Router{}))), Some(port));
         let mut client = Client { base_uri: String::from("127.0.0.1"), port };
         let request = get("/".to_string(), vec!());
 

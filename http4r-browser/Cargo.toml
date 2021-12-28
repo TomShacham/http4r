@@ -15,3 +15,4 @@ console_error_panic_hook = "0.1.7"
 instant = { version = "0.1.12", features = [ "wasm-bindgen", "inaccurate" ] }
 web-sys = { version = "0.3.55", features = ["console"] }
 js-sys = { version = "0.3.55" }
+serde_json = "1.0.73"
