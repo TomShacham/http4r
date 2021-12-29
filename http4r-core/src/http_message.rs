@@ -6,76 +6,109 @@ use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, PO
 use crate::http_message::Status::{NotFound, OK, Unknown, InternalServerError, BadRequest, LengthRequired, MovedPermanently};
 
 
-type Headers = Vec<Header>;
+type HeaderType = (String, String);
+type HeadersType = Vec<HeaderType>;
 
-pub fn header(headers: &Headers, name: &str) -> Option<Header> {
-    for header in headers {
-        if header.0.to_lowercase() == name.to_lowercase() {
-            return Some(header.clone());
+pub struct Headers {
+    pub vec: HeadersType,
+}
+
+impl<'a> Headers {
+    pub fn empty() -> Headers {
+        Headers { vec: vec!() }
+    }
+
+    pub fn from(pairs: HeadersType) -> Headers {
+        let mut headers = Headers { vec: vec!() };
+        for pair in pairs {
+            headers = headers.add_header(pair)
         }
+        headers
     }
-    None
-}
 
-pub fn js_headers_from_string(str: &str) -> Headers {
-    str.split("; ").fold(vec!(), |mut acc: Vec<(String, String)>, next: &str| {
-        let mut split = next.split(": ");
-        acc.push((split.next().unwrap().to_string(), split.next().unwrap().to_string()));
-        acc
-    })
-}
-
-pub fn js_headers_to_string(headers: &Headers) -> String {
-    headers.iter().map(|h| {
-        let clone = h.clone();
-        clone.0 + ": " + clone.1.as_str()
-    }).collect::<Vec<String>>()
-        .join("; ")
-}
-
-pub fn headers_to_string(headers: &Headers) -> String {
-    headers.iter().map(|h| {
-        let clone = h.clone();
-        clone.0 + ": " + clone.1.as_str()
-    }).collect::<Vec<String>>()
-        .join("\r\n")
-}
-
-pub fn add_header(headers: &Headers, header: Header) -> Headers {
-    let mut new = vec!();
-    let mut exists = false;
-    for existing in headers {
-        if existing.0 == header.0 {
-            new.push((existing.clone().0, existing.clone().1 + ", " + header.1.as_str()));
-            exists = true
-        } else {
-            new.push(existing.clone())
+    pub fn add_header(self, header: HeaderType) -> Headers {
+        let mut new: HeadersType = vec!();
+        let mut exists = false;
+        for existing in self.vec {
+            if existing.0 == header.0 {
+                let string = existing.clone().1.to_string() + ", " + header.1.as_str();
+                new.push((existing.0, string.clone()));
+                exists = true
+            } else {
+                new.push(existing.clone())
+            }
         }
-    }
-    if !exists {
-        new.push(header)
-    }
-    return new;
-}
-
-pub fn replace_header(headers: &Headers, replacing: Header) -> Headers {
-    let mut new = vec!();
-    let mut exists = false;
-    for existing in headers {
-        if existing.0 == replacing.0 {
-            new.push((existing.clone().0, replacing.1.clone()));
-            exists = true
-        } else {
-            new.push(existing.clone())
+        if !exists {
+            new.push(header)
         }
+        Headers { vec: new }
     }
-    if !exists {
-        new.push(replacing)
-    }
-    return new;
-}
 
-pub type Header = (String, String);
+    pub fn replace_header(self, replacing: (&str, &str)) -> Headers {
+        let mut new: HeadersType = vec!();
+        let mut exists = false;
+        for existing in self.vec {
+            if existing.0 == replacing.0 {
+                new.push((existing.clone().0, replacing.1.to_string()));
+                exists = true
+            } else {
+                new.push((existing.0.to_string(), existing.1.to_string()))
+            }
+        }
+        if !exists {
+            new.push((replacing.0.to_string(), replacing.1.to_string()));
+        }
+        return Headers { vec: new };
+    }
+
+
+    pub fn header(&self, name: &str) -> Option<(String, String)> {
+        for header in &self.vec {
+            if header.0.to_lowercase() == name.to_lowercase() {
+                return Some((header.0.to_string(), header.1.to_string()));
+            }
+        }
+        None
+    }
+
+    pub fn content_length_header(&self) -> Option<usize> {
+        self.header("Content-Length").map(|x| { x.1.parse().unwrap() })
+    }
+
+    fn parse_from(header_string: &'a str) -> Headers {
+        if header_string.is_empty() {
+            return Headers::empty();
+        }
+        header_string.split("\r\n").fold(Headers::empty(), |acc, pair| {
+            let pair = pair.split(": ").collect::<Vec<&str>>();
+            acc.add_header((pair[0].to_string(), pair[1].to_string()))
+        })
+    }
+
+    pub fn to_wire_string(&self) -> String {
+        self.vec.iter().map(|h| {
+            let clone = h.clone();
+            clone.0.to_owned() + ": " + clone.1.as_str()
+        }).collect::<Vec<String>>()
+            .join("\r\n")
+    }
+
+    pub fn js_headers_from_string(str: &'a str) -> Headers {
+        str.split("; ").fold(Headers::empty(), |acc: Headers, next: &str| {
+            let mut split = next.split(": ");
+            acc.add_header((split.next().unwrap().to_string(), split.next().unwrap().to_string()))
+        })
+    }
+
+    pub fn js_headers_to_string(headers: &HeadersType) -> String {
+        headers.iter().map(|h| {
+            let clone = h.clone();
+            clone.0 + ": " + clone.1.as_str()
+        }).collect::<Vec<String>>()
+            .join("; ")
+    }
+
+}
 
 pub enum HttpMessage<'a> {
     Request(Request<'a>),
@@ -130,14 +163,14 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let header_string = if headers.is_none() { "" } else {
         str::from_utf8(&headers.unwrap()).unwrap()
     };
-    let mut headers = parse_headers(header_string);
+    let mut headers = Headers::parse_from(header_string);
 
     let is_response = part1.starts_with("HTTP");
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
     let is_req_and_method_can_have_body = !is_response && method_can_have_body;
     let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
-    let no_content_length_or_transfer_encoding = header(&headers, "Content-Length").is_none() &&
-        header(&headers, "Transfer-Encoding").is_none();
+    let no_content_length_or_transfer_encoding = headers.content_length_header().is_none() &&
+        headers.header("Transfer-Encoding").is_none();
 
     if (is_req_and_method_can_have_body && no_content_length_or_transfer_encoding)
         || is_response && no_content_length_or_transfer_encoding {
@@ -147,10 +180,10 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     // todo() support trailers
 
     let body;
-    let content_length = content_length_header(&headers);
+    let content_length = headers.content_length_header();
     match content_length {
         Some(_) if is_req_and_method_cannot_have_body => {
-            headers = replace_header(&headers, ("Content-Length".to_string(), "0".to_string()));
+            headers = headers.replace_header(("Content-Length", "0"));
             body = Body::BodyString("")
         }
         Some(content_length) if content_length + pre_body_index <= buffer.len() => {
@@ -193,34 +226,16 @@ pub enum MessageError {
     HeadersTooBig(String),
 }
 
-fn parse_headers(header_string: &str) -> Vec<Header> {
-    let mut headers = vec!();
-    if header_string.is_empty() {
-        return headers;
-    }
-    header_string.split("\r\n").for_each(|pair| {
-        let pair = pair.split(": ").collect::<Vec<&str>>();
-        headers = add_header(&headers, (pair[0].to_string(), pair[1].to_string()));
-    });
-    headers
-}
-
-pub fn content_length_header(headers: &Vec<Header>) -> Option<usize> {
-    header(&headers, "Content-Length").map(|x| { x.1.parse().unwrap() })
-}
-
 impl<'a> Response<'a> {
     pub fn status_line_and_headers(&self) -> String {
         let mut response = String::new();
         let http = format!("HTTP/1.1 {} {}", &self.status.to_string(), &self.status.value());
         response.push_str(&http);
         response.push_str("\r\n");
-        for (name, value) in &self.headers {
-            let header_string = format!("{}: {}", name, value);
-            response.push_str(&header_string);
-            response.push_str("\r\n");
-        }
-        response.push_str("\r\n");
+
+        response.push_str(&self.headers.to_wire_string().as_str());
+
+        response.push_str("\r\n\r\n");
         response
     }
 }
@@ -240,9 +255,9 @@ pub fn body_length(body: &Body) -> u32 {
 pub fn with_content_length(message: HttpMessage) -> HttpMessage {
     match message {
         HttpMessage::Request(request) => {
-            if header(&request.headers, "Content-Length").is_none() {
+            if request.headers.content_length_header().is_none() {
                 return HttpMessage::Request(Request {
-                    headers: add_header(&request.headers, ("Content-Length".to_string(), body_length(&request.body).to_string())),
+                    headers: request.headers.add_header(("Content-Length".to_string(), body_length(&request.body).to_string())),
                     ..request
                 });
             } else {
@@ -250,9 +265,9 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
             }
         }
         HttpMessage::Response(response) => {
-            if header(&response.headers, "Content-Length").is_none() {
+            if response.headers.content_length_header().is_none() {
                 return HttpMessage::Response(Response {
-                    headers: add_header(&response.headers, ("Content-Length".to_string(), body_length(&response.body).to_string())),
+                    headers: response.headers.add_header(("Content-Length".to_string(), body_length(&response.body).to_string())),
                     ..response
                 });
             } else {
@@ -338,39 +353,39 @@ impl Method {
     }
 }
 
-pub fn ok(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn ok<'a>(headers: Headers, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: OK }
 }
 
-pub fn bad_request(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn bad_request<'a>(headers: Headers, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: BadRequest }
 }
 
-pub fn internal_server_error(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn internal_server_error<'a>(headers: Headers, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: InternalServerError }
 }
 
-pub fn length_required(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn length_required<'a>(headers: Headers, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: LengthRequired }
 }
 
-pub fn not_found(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn not_found<'a>(headers: Headers, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: NotFound }
 }
 
-pub fn moved_permanently(headers: Vec<(String, String)>, body: Body) -> Response {
+pub fn moved_permanently<'a>(headers: Headers, body: Body<'a>) -> Response<'a> {
     Response { headers, body, status: MovedPermanently }
 }
 
-pub fn request<'a>(method: Method, uri: &str, headers: Vec<(String, String)>) -> Request<'a> {
+pub fn request<'a>(method: Method, uri: &str, headers: Headers) -> Request<'a> {
     Request { method, headers, body: BodyString(""), uri: uri.to_string() }
 }
 
-pub fn get<'a>(uri: &str, headers: Vec<(String, String)>) -> Request<'a> {
+pub fn get<'a>(uri: &str, headers: Headers) -> Request<'a> {
     Request { method: GET, headers, body: BodyString(""), uri: uri.to_string() }
 }
 
-pub fn post<'a>(uri: &'a str, headers: Vec<(String, String)>, body: Body<'a>) -> Request<'a> {
+pub fn post<'a>(uri: &'a str, headers: Headers, body: Body<'a>) -> Request<'a> {
     Request { method: POST, headers, body, uri: uri.to_string() }
 }
 

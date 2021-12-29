@@ -3,7 +3,7 @@ use std::{thread};
 use std::io::{copy, Read, Write};
 use std::sync::Arc;
 use crate::handler::Handler;
-use crate::http_message::{bad_request, HttpMessage, length_required, message_from, MessageError, Response, with_content_length};
+use crate::http_message::{bad_request, Headers, HttpMessage, length_required, message_from, MessageError, Response, with_content_length};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 
@@ -61,11 +61,11 @@ impl Server where {
 
         match result {
             Err(MessageError::HeadersTooBig(msg)) => {
-                let response = bad_request(vec!(), BodyString(msg.as_str()));
+                let response = bad_request(Headers::empty(), BodyString(msg.as_str()));
                 Self::write_response_to_wire(&mut stream, response)
             }
             Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
-                let response = length_required(vec!(), BodyString(msg.as_str()));
+                let response = length_required(Headers::empty(), BodyString(msg.as_str()));
                 Self::write_response_to_wire(&mut stream, response)
             }
             Ok(HttpMessage::Request(request)) => {

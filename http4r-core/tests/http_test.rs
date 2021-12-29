@@ -1,13 +1,13 @@
 use http4r_core::http_message::Status::{NotFound, OK};
 use http4r_core::handler::Handler;
-use http4r_core::http_message::{not_found, ok, Request, Response};
+use http4r_core::http_message::{Headers, not_found, ok, Request, Response};
 use http4r_core::http_message::Body::BodyString;
 
 #[cfg(test)]
 mod tests {
     use std::io::{Read, repeat};
     use http4r_core::client::{Client, WithContentLength};
-    use http4r_core::http_message::{body_string, get, headers_to_string, post, request, Response};
+    use http4r_core::http_message::{body_string, get, post, request, Response};
     use http4r_core::http_message::Body::{BodyStream, BodyString};
     use http4r_core::http_message::Method::{CONNECT, GET, HEAD, OPTIONS, TRACE};
     use http4r_core::logging_handler::{LoggingHttpHandler, RustLogger, WasmClock};
@@ -20,11 +20,11 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let request = get("/", vec!());
+        let request = get("/", Headers::empty());
 
         client.handle(request, |response: Response| {
             assert_eq!("OK", response.status.to_string());
-            assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
+            assert_eq!("Content-Length: 0", response.headers.to_wire_string());
             assert_eq!("".to_string(), body_string(response.body));
         });
     }
@@ -36,7 +36,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let post_with_stream_body = post("/", vec!(("Content-Length".to_string(), 20000.to_string())), BodyStream(Box::new(buffer)));
+        let post_with_stream_body = post("/", Headers::from(vec!(("Content-Length".to_string(), 20000.to_string()))), BodyStream(Box::new(buffer)));
 
         client.handle(post_with_stream_body, |response| {
             match response.body {
@@ -46,7 +46,7 @@ mod tests {
                     assert_eq!(20000, string.len());
                     assert_eq!(string[0..10], "tttttttttt".to_string());
                     assert_eq!("OK", response.status.to_string());
-                    assert_eq!("Content-Length: 20000", headers_to_string(&response.headers));
+                    assert_eq!("Content-Length: 20000", response.headers.to_wire_string());
                 }
             }
         });
@@ -57,11 +57,11 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let no_headers = get("/", vec!());
+        let no_headers = get("/", Headers::empty());
 
         client.handle(no_headers, |response: Response| {
             assert_eq!("OK", response.status.to_string());
-            assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
+            assert_eq!("Content-Length: 0", response.headers.to_wire_string());
             assert_eq!("".to_string(), body_string(response.body));
         });
     }
@@ -72,8 +72,8 @@ mod tests {
         let logger = LoggingHttpHandler::new(RustLogger {}, WasmClock {}, router);
         let mut redirector = RedirectToHttpsHandler::new(logger);
 
-        let request = get("/", vec!());
-        let request_to_no_route = get("no/route/here", vec!());
+        let request = get("/", Headers::empty());
+        let request_to_no_route = get("no/route/here", Headers::empty());
 
         // non-http
         redirector.handle(request, |response| {
@@ -87,11 +87,11 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger {}, WasmClock {}, Router {}))));
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let request = get("/", vec!());
+        let request = get("/", Headers::empty());
 
         client.handle(request, |response: Response| {
             assert_eq!("OK", response.status.to_string());
-            assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
+            assert_eq!("Content-Length: 0", response.headers.to_wire_string());
             assert_eq!("".to_string(), body_string(response.body));
         });
     }
@@ -108,13 +108,13 @@ mod tests {
         let methods = vec!(GET, HEAD, OPTIONS, CONNECT, TRACE);
 
         for method in methods {
-            let should_ignore_body = request(method, "/", vec!())
+            let should_ignore_body = request(method, "/", Headers::empty())
                 .with_body(BodyString("non empty body"));
 
             client.handle(should_ignore_body, |response: Response| {
                 assert_eq!("OK", response.status.to_string());
                 assert_eq!("".to_string(), body_string(response.body));
-                assert_eq!("Content-Length: 0", headers_to_string(&response.headers));
+                assert_eq!("Content-Length: 0", response.headers.to_wire_string());
             });
         }
     }
@@ -125,8 +125,8 @@ struct Router {}
 impl Handler for Router {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
         let response = match req.uri.as_str() {
-            "/" => ok(vec!(), BodyString("")),
-            _ => not_found(vec!(), BodyString("Not found")),
+            "/" => ok(Headers::empty(), BodyString("")),
+            _ => not_found(Headers::empty(), BodyString("Not found")),
         };
         fun(response)
     }
