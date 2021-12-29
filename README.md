@@ -9,6 +9,8 @@ local webpage that loads in wasm app and runs tests
 
 ---
 - Proper Uri
+- Put Headers stuff onto an Impl? for discoverability
+  - no point matching the wire protocol with the structs ???
 - Split server new and handle
   - make a test server and a threadpool server
 - Response status message

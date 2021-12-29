@@ -54,12 +54,12 @@ impl JSResponse {
 #[wasm_bindgen]
 pub fn serve(req: JSRequest) -> JSResponse {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    let mut app = http4r_coreApp::new(LoggingHttpHandler::new(ConsoleLogger{}, WasmClock {}, Router {}));
+    let mut app = ExampleApp::new(LoggingHttpHandler::new(ConsoleLogger{}, WasmClock {}, Router {}));
     let request = Request {
         headers: js_headers_from_string(&req.headers),
         method: Method::from(req.method),
         uri: req.uri,
-        body: BodyString(req.body),
+        body: BodyString(req.body.as_str()),
     };
     let mut response = JSResponse {
         body: "Not found".to_string(),
@@ -76,19 +76,19 @@ pub fn serve(req: JSRequest) -> JSResponse {
     response
 }
 
-pub struct http4r_coreApp<H> where H: Handler {
+pub struct ExampleApp<H> where H: Handler {
     next_handler: H,
 }
 
-impl<H> http4r_coreApp<H> where H: Handler {
-    pub fn new(next_handler: H) -> http4r_coreApp<H> {
-        http4r_coreApp {
+impl<H> ExampleApp<H> where H: Handler {
+    pub fn new(next_handler: H) -> ExampleApp<H> {
+        ExampleApp {
             next_handler
         }
     }
 }
 
-impl<H> Handler for http4r_coreApp<H> where H: Handler {
+impl<H> Handler for ExampleApp<H> where H: Handler {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
         println!("App start");
         self.next_handler.handle(req, |res| {

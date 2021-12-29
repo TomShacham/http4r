@@ -2,7 +2,7 @@ use std::io::Read;
 use std::net::TcpStream;
 use std::str;
 use crate::http_message::Body::{BodyStream, BodyString};
-use crate::http_message::Method::{DELETE, GET, OPTIONS, PATCH, POST};
+use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
 use crate::http_message::Status::{NotFound, OK, Unknown, InternalServerError, BadRequest, LengthRequired, MovedPermanently};
 
 
@@ -44,16 +44,33 @@ pub fn headers_to_string(headers: &Headers) -> String {
 pub fn add_header(headers: &Headers, header: Header) -> Headers {
     let mut new = vec!();
     let mut exists = false;
-    for h in headers {
-        if h.0 == header.0 {
-            new.push((h.clone().0, h.clone().1 + ", " + header.1.as_str()));
+    for existing in headers {
+        if existing.0 == header.0 {
+            new.push((existing.clone().0, existing.clone().1 + ", " + header.1.as_str()));
             exists = true
         } else {
-            new.push(h.clone())
+            new.push(existing.clone())
         }
     }
     if !exists {
         new.push(header)
+    }
+    return new;
+}
+
+pub fn replace_header(headers: &Headers, replacing: Header) -> Headers {
+    let mut new = vec!();
+    let mut exists = false;
+    for existing in headers {
+        if existing.0 == replacing.0 {
+            new.push((existing.clone().0, replacing.1.clone()));
+            exists = true
+        } else {
+            new.push(existing.clone())
+        }
+    }
+    if !exists {
+        new.push(replacing)
     }
     return new;
 }
@@ -64,6 +81,7 @@ pub enum HttpMessage<'a> {
     Request(Request<'a>),
     Response(Response<'a>),
 }
+
 impl<'a> HttpMessage<'a> {
     pub fn to_req(self) -> Request<'a> {
         match self {
@@ -82,16 +100,21 @@ impl<'a> HttpMessage<'a> {
 pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<HttpMessage, MessageError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut pre_body_index = 0;
-    let mut snip = 0;
+    let mut end_of_start_line = 0;
     let mut first_line = None;
     let mut headers = None;
     for char in buffer {
         if first_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
             first_line = Some(&buffer[..pre_body_index]);
-            snip = pre_body_index;
+            end_of_start_line = pre_body_index;
         }
         if !first_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
-            headers = Some(&buffer[snip..pre_body_index - prev.len()]);
+            let end_of_headers = pre_body_index - prev.len();
+            if end_of_start_line > end_of_headers {
+                headers = None
+            } else {
+                headers = Some(&buffer[end_of_start_line..end_of_headers]);
+            }
             break;
         }
         prev.remove(0);
@@ -104,11 +127,20 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let request_line = str::from_utf8(&first_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
 
     let (part1, part2, _part3) = (request_line[0], request_line[1], request_line[2]);
-    let header_string = str::from_utf8(&headers.unwrap()).unwrap();
-    let headers = parse_headers(header_string);
+    let header_string = if headers.is_none() { "" } else {
+        str::from_utf8(&headers.unwrap()).unwrap()
+    };
+    let mut headers = parse_headers(header_string);
 
-    if header(&headers, "Content-Length").is_none() &&
-        header(&headers, "Transfer-Encoding").is_none() {
+    let is_response = part1.starts_with("HTTP");
+    let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
+    let is_req_and_method_can_have_body = !is_response && method_can_have_body;
+    let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
+    let no_content_length_or_transfer_encoding = header(&headers, "Content-Length").is_none() &&
+        header(&headers, "Transfer-Encoding").is_none();
+
+    if (is_req_and_method_can_have_body && no_content_length_or_transfer_encoding)
+        || is_response && no_content_length_or_transfer_encoding {
         return Err(MessageError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
     }
 
@@ -117,8 +149,12 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let body;
     let content_length = content_length_header(&headers);
     match content_length {
+        Some(_) if is_req_and_method_cannot_have_body => {
+            headers = replace_header(&headers, ("Content-Length".to_string(), "0".to_string()));
+            body = Body::BodyString("")
+        }
         Some(content_length) if content_length + pre_body_index <= buffer.len() => {
-            let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap().to_string();
+            let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap();
             body = Body::BodyString(result)
         }
         Some(content_length) => {
@@ -132,10 +168,10 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
                 body = Body::BodyStream(Box::new(body_stream));
             }
         }
-        _ => body = Body::BodyString("".to_string())
+        _ => body = Body::BodyString("")
     }
 
-    if part1.starts_with("HTTP") {
+    if is_response {
         Ok(HttpMessage::Response(Response {
             status: Status::from(part2),
             headers,
@@ -159,6 +195,9 @@ pub enum MessageError {
 
 fn parse_headers(header_string: &str) -> Vec<Header> {
     let mut headers = vec!();
+    if header_string.is_empty() {
+        return headers;
+    }
     header_string.split("\r\n").for_each(|pair| {
         let pair = pair.split(": ").collect::<Vec<&str>>();
         headers = add_header(&headers, (pair[0].to_string(), pair[1].to_string()));
@@ -171,7 +210,7 @@ pub fn content_length_header(headers: &Vec<Header>) -> Option<usize> {
 }
 
 impl<'a> Response<'a> {
-    pub fn resource_and_headers(&self) -> String {
+    pub fn status_line_and_headers(&self) -> String {
         let mut response = String::new();
         let http = format!("HTTP/1.1 {} {}", &self.status.to_string(), &self.status.value());
         response.push_str(&http);
@@ -187,7 +226,7 @@ impl<'a> Response<'a> {
 }
 
 pub enum Body<'a> {
-    BodyString(String),
+    BodyString(&'a str),
     BodyStream(Box<dyn Read + 'a>),
 }
 
@@ -236,9 +275,18 @@ pub struct Response<'a> {
     pub status: Status,
 }
 
+impl<'a> Request<'a> {
+    pub fn with_body(self, body: Body<'a>) -> Request<'a> {
+        Request {
+            body,
+            ..self
+        }
+    }
+}
+
 pub fn body_string(mut body: Body) -> String {
     match body {
-        BodyString(str) => str,
+        BodyString(str) => str.to_string(),
         BodyStream(ref mut reader) => {
             let big = &mut Vec::new();
             let _read_bytes = reader.read_to_end(big).unwrap();
@@ -250,10 +298,14 @@ pub fn body_string(mut body: Body) -> String {
 #[derive(PartialEq, Debug)]
 pub enum Method {
     GET,
+    CONNECT,
+    HEAD,
     POST,
     OPTIONS,
     DELETE,
     PATCH,
+    PUT,
+    TRACE,
 }
 
 impl Method {
@@ -263,7 +315,11 @@ impl Method {
             POST => String::from("POST"),
             PATCH => String::from("PATCH"),
             OPTIONS => String::from("OPTIONS"),
+            CONNECT => String::from("CONNECT"),
+            HEAD => String::from("HEAD"),
             DELETE => String::from("DELETE"),
+            PUT => String::from("PUT"),
+            TRACE => String::from("TRACE")
         }
     }
 
@@ -274,6 +330,9 @@ impl Method {
             "PATCH" => PATCH,
             "OPTIONS" => OPTIONS,
             "DELETE" => DELETE,
+            "CONNECT" => CONNECT,
+            "TRACE" => TRACE,
+            "HEAD" => HEAD,
             _ => panic!("Unknown method")
         }
     }
@@ -303,12 +362,16 @@ pub fn moved_permanently(headers: Vec<(String, String)>, body: Body) -> Response
     Response { headers, body, status: MovedPermanently }
 }
 
-pub fn get<'a>(uri: String, headers: Vec<(String, String)>) -> Request<'a> {
-    Request { method: GET, headers, body: BodyString("".to_string()), uri }
+pub fn request<'a>(method: Method, uri: &str, headers: Vec<(String, String)>) -> Request<'a> {
+    Request { method, headers, body: BodyString(""), uri: uri.to_string() }
 }
 
-pub fn post<'a>(uri: String, headers: Vec<(String, String)>, body: Body<'a>) -> Request<'a> {
-    Request { method: POST, headers, body, uri }
+pub fn get<'a>(uri: &str, headers: Vec<(String, String)>) -> Request<'a> {
+    Request { method: GET, headers, body: BodyString(""), uri: uri.to_string() }
+}
+
+pub fn post<'a>(uri: &'a str, headers: Vec<(String, String)>, body: Body<'a>) -> Request<'a> {
+    Request { method: POST, headers, body, uri: uri.to_string() }
 }
 
 

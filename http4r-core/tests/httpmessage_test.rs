@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod tests {
-    use http4r_core::http_message::{add_header, header, js_headers_from_string, js_headers_to_string};
+    use http4r_core::http_message::{add_header, header, js_headers_from_string, js_headers_to_string, replace_header};
 
     #[test]
     fn get_header() {
@@ -30,6 +30,17 @@ mod tests {
 
         assert_eq!(add_header(&added_again, ("foo".to_string(), "quux".to_string())),
                    vec!(("foo".to_string(), "bar, baz, quux".to_string())));
+    }
+
+    #[test]
+    fn replace_headers() {
+        let vec1 = vec!(("a".to_string(), "b".to_string()));
+        let added = add_header(&vec1, ("a".to_string(), "c".to_string()));
+
+        assert_eq!(added, vec!(("a".to_string(), "b, c".to_string())));
+
+        let replaced = replace_header(&added, ("a".to_string(), "b".to_string()));
+        assert_eq!(replaced, vec!(("a".to_string(), "b".to_string())));
     }
 
     #[test]

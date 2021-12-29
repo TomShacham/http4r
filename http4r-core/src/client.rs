@@ -6,15 +6,14 @@ use crate::http_message::{bad_request, headers_to_string, HttpMessage, message_f
 use crate::http_message::Body::{BodyStream, BodyString};
 
 impl Handler for Client {
-    fn handle<F>(self: &mut Client, req: Request, fun: F) -> ()
+    fn handle<F>(self: &mut Client, mut req: Request, fun: F) -> ()
         where F: FnOnce(Response) -> () + Sized {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
-        let mut request = with_content_length(HttpMessage::Request(req)).to_req();
-        let request_string = format!("{} / HTTP/1.1\r\n{}\r\n\r\n", request.method.value(), headers_to_string(&request.headers));
+        let request_string = format!("{} / HTTP/1.1\r\n{}\r\n\r\n", req.method.value(), headers_to_string(&req.headers));
 
         stream.write(request_string.as_bytes()).unwrap();
-        match request.body {
+        match req.body {
             BodyStream(ref mut read) => {
                 let _copy = copy(read, &mut stream).unwrap();
             }
@@ -32,7 +31,7 @@ impl Handler for Client {
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,
-            _ => bad_request(vec!(), BodyString("nah".to_string()))
+            _ => bad_request(vec!(), BodyString("nah"))
         };
 
         fun(response)
@@ -42,5 +41,26 @@ impl Handler for Client {
 
 pub struct Client {
     pub base_uri: String,
-    pub port: u32,
+    pub port: u16,
+}
+
+pub struct WithContentLength<H> where H: Handler {
+    next_handler: H,
+}
+impl<H> WithContentLength<H> where H: Handler {
+    pub fn new(next_handler: H) -> WithContentLength<H> {
+        WithContentLength {
+            next_handler
+        }
+    }
+}
+
+impl<H> Handler for WithContentLength<H> where H: Handler {
+    fn handle<F>(self: &mut WithContentLength<H>, req: Request, fun: F) -> ()
+        where F: FnOnce(Response) -> () + Sized {
+        let request = with_content_length(HttpMessage::Request(req)).to_req();
+        self.next_handler.handle(request, |res| {
+            fun(res)
+        })
+    }
 }

@@ -7,15 +7,20 @@ use crate::http_message::{bad_request, HttpMessage, length_required, message_fro
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 
-pub struct Server<H> where H: Handler + Sync + Send + 'static {
-    _next_handler: H,
+pub struct Server {
+    pub port: u16,
 }
 
-impl<H> Server<H> where H: Handler + Sync + Send + 'static {
-    pub fn new<F>(fun: F, mut port: Option<u32>, mut threadpool_size: Option<u32>)
-        where F: Fn() -> Result<H, String> + Send + Sync + 'static {
-        let addr = format!("127.0.0.1:{}", port.get_or_insert(7878));
-        let listener = TcpListener::bind(addr).unwrap();
+impl Server where {
+    pub fn new(port: u16) -> Server {
+        Server {
+            port
+        }
+    }
+
+    pub fn start<F, H>(&mut self, fun: F, mut threadpool_size: Option<u32>)
+        where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
+        let listener = self.listen();
         let handler = Arc::new(fun);
 
         let x = threadpool_size.get_or_insert(10);
@@ -29,10 +34,9 @@ impl<H> Server<H> where H: Handler + Sync + Send + 'static {
         }
     }
 
-    pub fn test<F>(fun: F, mut port: Option<u32>)
-        where F: Fn() -> Result<H, String> + Send + Sync + 'static {
-        let addr = format!("127.0.0.1:{}", port.get_or_insert(7878));
-        let listener = TcpListener::bind(addr).unwrap();
+    pub fn test<F, H>(&mut self, fun: F)
+        where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
+        let listener = self.listen();
         let handler = Arc::new(fun);
 
         thread::spawn(move || {
@@ -42,18 +46,26 @@ impl<H> Server<H> where H: Handler + Sync + Send + 'static {
         });
     }
 
-    fn handle_request<F>(mut handler: Arc<F>, mut stream: TcpStream) where F: Fn() -> Result<H, String> + Send + Sync + 'static {
+    fn listen(&mut self) -> TcpListener {
+        let addr = format!("127.0.0.1:{}", self.port);
+        let listener = TcpListener::bind(addr).unwrap();
+        self.port = listener.local_addr().unwrap().port();
+        listener
+    }
+
+    fn handle_request<F, H>(handler: Arc<F>, mut stream: TcpStream)
+        where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
         let buffer = &mut [0 as u8; 16384];
         let first_read = stream.read(buffer).unwrap();
         let result = message_from(buffer, stream.try_clone().unwrap(), first_read);
 
         match result {
             Err(MessageError::HeadersTooBig(msg)) => {
-                let response = bad_request(vec!(), BodyString(msg));
+                let response = bad_request(vec!(), BodyString(msg.as_str()));
                 Self::write_response_to_wire(&mut stream, response)
             }
             Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
-                let response = length_required(vec!(), BodyString(msg));
+                let response = length_required(vec!(), BodyString(msg.as_str()));
                 Self::write_response_to_wire(&mut stream, response)
             }
             Ok(HttpMessage::Request(request)) => {
@@ -72,7 +84,7 @@ impl<H> Server<H> where H: Handler + Sync + Send + 'static {
 
     fn write_response_to_wire(mut stream: &mut TcpStream, response: Response) {
         let mut response = with_content_length(HttpMessage::Response(response)).to_res();
-        let mut returning: String = response.resource_and_headers();
+        let mut returning: String = response.status_line_and_headers();
 
         match response.body {
             BodyString(body_string) => {
