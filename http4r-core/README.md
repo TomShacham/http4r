@@ -13,7 +13,7 @@ local webpage that loads in wasm app and runs tests
 ---
 - Split out into monorepo
   - core api, routing, bidi etc
-- Proper Uri
+- Proper uri
 - Split server new and handle
 - Res status message
 - http version on message

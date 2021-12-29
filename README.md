@@ -10,8 +10,9 @@
     - read and write to database
 
 ---
+- get rid of instant in core somehow?
 - core api
-  - Proper Uri
+  - Proper uri
       - Client passes in uri to string
     - Response status message
     - http version on message

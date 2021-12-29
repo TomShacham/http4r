@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message;
-use crate::http_message::{bad_request, HttpMessage, message_from, Request, Response, with_content_length};
+use crate::http_message::{HttpMessage, message_from, Request, Response, with_content_length};
 use crate::http_message::Body::{BodyStream, BodyString};
 
 impl Handler for Client {
@@ -32,7 +32,7 @@ impl Handler for Client {
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,
-            _ => bad_request(Headers::empty(), BodyString("nah"))
+            _ => Response::bad_request(Headers::empty(), BodyString("nah"))
         };
 
         fun(response)

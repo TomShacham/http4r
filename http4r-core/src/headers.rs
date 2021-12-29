@@ -53,18 +53,17 @@ impl Headers {
         return Headers { vec: new };
     }
 
-
-    pub fn get(&self, name: &str) -> Option<(String, String)> {
+    pub fn get(&self, name: &str) -> Option<String> {
         for header in &self.vec {
             if header.0.to_lowercase() == name.to_lowercase() {
-                return Some((header.0.to_string(), header.1.to_string()));
+                return Some(header.1.to_string());
             }
         }
         None
     }
 
     pub fn content_length_header(&self) -> Option<usize> {
-        self.get("Content-Length").map(|x| { x.1.parse().unwrap() })
+        self.get("Content-Length").map(|x| { x.parse().unwrap() })
     }
 
     pub(crate) fn parse_from(header_string: &str) -> Headers {

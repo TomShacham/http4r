@@ -1,20 +1,22 @@
 use http4r_core::http_message::Status::{NotFound, OK};
 use http4r_core::handler::Handler;
 use http4r_core::headers::Headers;
-use http4r_core::http_message::{not_found, ok, Request, Response};
 use http4r_core::http_message::Body::BodyString;
+use http4r_core::http_message::{Request, Response};
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::io::{Read, repeat};
     use http4r_core::client::{Client, WithContentLength};
     use http4r_core::headers::Headers;
-    use http4r_core::http_message::{body_string, get, post, request, Response};
+    use http4r_core::http_message::{body_string, Request, Response};
     use http4r_core::http_message::Body::{BodyStream, BodyString};
     use http4r_core::http_message::Method::{CONNECT, GET, HEAD, OPTIONS, TRACE};
     use http4r_core::logging_handler::{LoggingHttpHandler, RustLogger, WasmClock};
     use http4r_core::redirect_to_https_handler::RedirectToHttpsHandler;
     use http4r_core::server::Server;
+    use http4r_core::uri::Uri;
     use super::*;
 
     #[test]
@@ -22,7 +24,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let request = get("/", Headers::empty());
+        let request = Request::get(Uri::parse("/"), Headers::empty());
 
         client.handle(request, |response: Response| {
             assert_eq!("OK", response.status.to_string());
@@ -38,7 +40,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let post_with_stream_body = post("/", Headers::from(vec!(("Content-Length", "20000"))), BodyStream(Box::new(buffer)));
+        let post_with_stream_body = Request::post(Uri::parse("/"), Headers::from(vec!(("Content-Length", "20000"))), BodyStream(Box::new(buffer)));
 
         client.handle(post_with_stream_body, |response| {
             match response.body {
@@ -59,7 +61,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let no_headers = get("/", Headers::empty());
+        let no_headers = Request::get(Uri::parse("/"), Headers::empty());
 
         client.handle(no_headers, |response: Response| {
             assert_eq!("OK", response.status.to_string());
@@ -72,10 +74,10 @@ mod tests {
     fn can_compose_http_handlers() {
         let router = Router {};
         let logger = LoggingHttpHandler::new(RustLogger {}, WasmClock {}, router);
-        let mut redirector = RedirectToHttpsHandler::new(logger);
+        let mut redirector = RedirectToHttpsHandler::new(logger, HashMap::new());
 
-        let request = get("/", Headers::empty());
-        let request_to_no_route = get("no/route/here", Headers::empty());
+        let request = Request::get(Uri::parse("/"), Headers::empty());
+        let request_to_no_route = Request::get(Uri::parse("no/route/here"), Headers::empty());
 
         // non-http
         redirector.handle(request, |response| {
@@ -87,9 +89,9 @@ mod tests {
 
         //http
         let mut server = Server::new(0);
-        server.test(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger {}, WasmClock {}, Router {}))));
+        server.test(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger {}, WasmClock {}, Router {}), HashMap::new())));
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let request = get("/", Headers::empty());
+        let request = Request::get(Uri::parse("/"), Headers::empty());
 
         client.handle(request, |response: Response| {
             assert_eq!("OK", response.status.to_string());
@@ -110,7 +112,7 @@ mod tests {
         let methods = vec!(GET, HEAD, OPTIONS, CONNECT, TRACE);
 
         for method in methods {
-            let should_ignore_body = request(method, "/", Headers::empty())
+            let should_ignore_body = Request::request(method, Uri::parse("/"), Headers::empty())
                 .with_body(BodyString("non empty body"));
 
             client.handle(should_ignore_body, |response: Response| {
@@ -126,9 +128,9 @@ struct Router {}
 
 impl Handler for Router {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
-        let response = match req.uri.as_str() {
-            "/" => ok(Headers::empty(), BodyString("")),
-            _ => not_found(Headers::empty(), BodyString("Not found")),
+        let response = match req.uri.to_string().as_str() {
+            "/" => Response::ok(Headers::empty(), BodyString("")),
+            _ => Response::not_found(Headers::empty(), BodyString("Not found")),
         };
         fun(response)
     }
@@ -138,7 +140,7 @@ struct PassThroughHandler {}
 
 impl Handler for PassThroughHandler {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
-        fun(ok(req.headers, req.body))
+        fun(Response::ok(req.headers, req.body))
     }
 }
 

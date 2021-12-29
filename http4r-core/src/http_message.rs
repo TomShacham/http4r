@@ -5,6 +5,7 @@ use crate::headers::{Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
 use crate::http_message::Status::{BadRequest, InternalServerError, LengthRequired, MovedPermanently, NotFound, OK, Unknown};
+use crate::uri::Uri;
 
 pub enum HttpMessage<'a> {
     Request(Request<'a>),
@@ -108,8 +109,8 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
         }))
     } else {
         Ok(HttpMessage::Request(Request {
-            method: Method::from(part1.to_string()),
-            uri: part2.to_string(),
+            method: Method::from(part1),
+            uri: Uri::parse(part2),
             headers,
             body,
         }))
@@ -176,7 +177,7 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
 pub struct Request<'a> {
     pub headers: Headers,
     pub body: Body<'a>,
-    pub uri: String,
+    pub uri: Uri<'a>,
     pub method: Method,
 }
 
@@ -190,6 +191,13 @@ impl<'a> Request<'a> {
     pub fn with_body(self, body: Body<'a>) -> Request<'a> {
         Request {
             body,
+            ..self
+        }
+    }
+
+    pub fn with_header(self, pair: (&str, &str)) -> Request<'a> {
+        Request {
+            headers: self.headers.add_header(pair),
             ..self
         }
     }
@@ -234,8 +242,8 @@ impl Method {
         }
     }
 
-    pub fn from(str: String) -> Method {
-        match str.as_str() {
+    pub fn from(str: &str) -> Method {
+        match str {
             "GET" => GET,
             "POST" => POST,
             "PATCH" => PATCH,
@@ -249,40 +257,45 @@ impl Method {
     }
 }
 
-pub fn ok(headers: Headers, body: Body) -> Response {
-    Response { headers, body, status: OK }
+impl<'a> Response<'a> {
+
+    pub fn ok(headers: Headers, body: Body) -> Response {
+        Response { headers, body, status: OK }
+    }
+
+    pub fn bad_request(headers: Headers, body: Body) -> Response {
+        Response { headers, body, status: BadRequest }
+    }
+
+    pub fn internal_server_error(headers: Headers, body: Body) -> Response {
+        Response { headers, body, status: InternalServerError }
+    }
+
+    pub fn length_required(headers: Headers, body: Body) -> Response {
+        Response { headers, body, status: LengthRequired }
+    }
+
+    pub fn not_found(headers: Headers, body: Body) -> Response {
+        Response { headers, body, status: NotFound }
+    }
+
+    pub fn moved_permanently(headers: Headers, body: Body) -> Response {
+        Response { headers, body, status: MovedPermanently }
+    }
 }
 
-pub fn bad_request(headers: Headers, body: Body) -> Response {
-    Response { headers, body, status: BadRequest }
-}
+impl<'a> Request<'a> {
+    pub fn request(method: Method, uri: Uri, headers: Headers) -> Request {
+        Request { method, headers, body: BodyString(""), uri }
+    }
 
-pub fn internal_server_error(headers: Headers, body: Body) -> Response {
-    Response { headers, body, status: InternalServerError }
-}
+    pub fn get(uri: Uri, headers: Headers) -> Request {
+        Request { method: GET, headers, body: BodyString(""), uri }
+    }
 
-pub fn length_required(headers: Headers, body: Body) -> Response {
-    Response { headers, body, status: LengthRequired }
-}
-
-pub fn not_found(headers: Headers, body: Body) -> Response {
-    Response { headers, body, status: NotFound }
-}
-
-pub fn moved_permanently(headers: Headers, body: Body) -> Response {
-    Response { headers, body, status: MovedPermanently }
-}
-
-pub fn request(method: Method, uri: &str, headers: Headers) -> Request {
-    Request { method, headers, body: BodyString(""), uri: uri.to_string() }
-}
-
-pub fn get<'a>(uri: &str, headers: Headers) -> Request<'a> {
-    Request { method: GET, headers, body: BodyString(""), uri: uri.to_string() }
-}
-
-pub fn post<'a>(uri: &'a str, headers: Headers, body: Body<'a>) -> Request<'a> {
-    Request { method: POST, headers, body, uri: uri.to_string() }
+    pub fn post(uri: Uri<'a>, headers: Headers, body: Body<'a>) -> Request<'a> {
+        Request { method: POST, headers, body, uri }
+    }
 }
 
 

@@ -7,13 +7,13 @@ mod tests {
     fn get_header() {
         assert_eq!(Headers::empty().get("foo"), None);
         assert_eq!(Headers::from(vec!(("foo", "bar"))).get("foo"),
-                   Some(("foo".to_string(), "bar".to_string())));
+                   Some("bar".to_string()));
     }
 
     #[test]
     fn is_case_insensitive_and_preserves_case() {
         assert_eq!(Headers::from(vec!(("fOo", "bAr"))).get("Foo"),
-                   Some(("fOo".to_string(), "bAr".to_string())));
+                   Some("bAr".to_string()));
     }
 
     #[test]
@@ -58,8 +58,8 @@ mod tests {
     fn parse_js_headers_from_string() {
         let headers = Headers::js_headers_from_string("Content-Length: 10; Content-Type: text/html");
 
-        assert_eq!(headers.get("Content-Length").unwrap(), ("Content-Length".to_string(), "10".to_string()));
-        assert_eq!(headers.get("Content-Type").unwrap(), ("Content-Type".to_string(), "text/html".to_string()))
+        assert_eq!(headers.get("Content-Length").unwrap(), "10".to_string());
+        assert_eq!(headers.get("Content-Type").unwrap(), "text/html".to_string())
     }
 
     #[test]
