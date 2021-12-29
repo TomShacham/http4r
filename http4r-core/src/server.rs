@@ -1,9 +1,10 @@
 use std::net::{TcpListener, TcpStream};
-use std::{thread};
+use std::thread;
 use std::io::{copy, Read, Write};
 use std::sync::Arc;
 use crate::handler::Handler;
-use crate::http_message::{bad_request, Headers, HttpMessage, length_required, message_from, MessageError, Response, with_content_length};
+use crate::headers::Headers;
+use crate::http_message::{bad_request, HttpMessage, length_required, message_from, MessageError, Response, with_content_length};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 

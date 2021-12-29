@@ -1,12 +1,14 @@
 use http4r_core::http_message::Status::{NotFound, OK};
 use http4r_core::handler::Handler;
-use http4r_core::http_message::{Headers, not_found, ok, Request, Response};
+use http4r_core::headers::Headers;
+use http4r_core::http_message::{not_found, ok, Request, Response};
 use http4r_core::http_message::Body::BodyString;
 
 #[cfg(test)]
 mod tests {
     use std::io::{Read, repeat};
     use http4r_core::client::{Client, WithContentLength};
+    use http4r_core::headers::Headers;
     use http4r_core::http_message::{body_string, get, post, request, Response};
     use http4r_core::http_message::Body::{BodyStream, BodyString};
     use http4r_core::http_message::Method::{CONNECT, GET, HEAD, OPTIONS, TRACE};
@@ -141,7 +143,6 @@ impl Handler for PassThroughHandler {
 }
 
 //todo() DO NOT EXPECT A CONTENT LENGTH FOR HEAD,OPTIONS,CONNECT,204,1XX ETC
-//todo() test zero length body
 //todo() handle duplicate Content-lengths Content-Length: 42, 42
 //todo() handle both transfer encoding and content length as error
 // If a message is received with both a Transfer-Encoding and a
@@ -165,5 +166,4 @@ impl Handler for PassThroughHandler {
 //    SHOULD respond with a 400 (Bad Request) response.
 //todo() handle set-cookie especially as multiple headers of this value cannot be combined
 // with commas
-//todo() get doesnt send body etc - all the method semantics
 //todo() allow header for 405 method not allowed

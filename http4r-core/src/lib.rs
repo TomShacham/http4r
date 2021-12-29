@@ -6,5 +6,6 @@ mod pool;
 pub mod logging_handler;
 pub mod handler;
 pub mod redirect_to_https_handler;
+pub mod headers;
 
 

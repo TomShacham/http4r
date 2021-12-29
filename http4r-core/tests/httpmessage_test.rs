@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod tests {
-    use http4r_core::http_message::Headers;
+    use http4r_core::headers::Headers;
 
     #[test]
     fn get_header() {

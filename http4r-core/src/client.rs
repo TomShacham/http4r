@@ -1,8 +1,9 @@
 use std::io::{copy, Read, Write};
 use std::net::TcpStream;
 use crate::handler::Handler;
+use crate::headers::Headers;
 use crate::http_message;
-use crate::http_message::{bad_request, Headers, HttpMessage, message_from, Request, Response, with_content_length};
+use crate::http_message::{bad_request, HttpMessage, message_from, Request, Response, with_content_length};
 use crate::http_message::Body::{BodyStream, BodyString};
 
 impl Handler for Client {
