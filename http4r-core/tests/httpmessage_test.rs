@@ -41,6 +41,10 @@ mod tests {
 
         let replaced = replace_header(&added, ("a".to_string(), "b".to_string()));
         assert_eq!(replaced, vec!(("a".to_string(), "b".to_string())));
+
+        let add_when_using_replace = replace_header(&vec1, ("new".to_string(), "value".to_string()));
+        let with_new_value = vec!(("a".to_string(), "b".to_string()), ("new".to_string(), "value".to_string()));
+        assert_eq!(add_when_using_replace, with_new_value)
     }
 
     #[test]
