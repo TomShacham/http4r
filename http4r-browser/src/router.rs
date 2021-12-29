@@ -8,11 +8,11 @@ pub struct Router {}
 
 impl Handler for Router {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
-        match req.uri.as_str() {
+        match req.uri.to_string().as_str() {
             "/" => {
-                fun(http_message::ok(req.headers, BodyString("<h1>title</h1>")))
+                fun(Response::ok(req.headers, BodyString("<h1>title</h1>")))
             },
-            _ => fun(http_message::not_found(Headers::empty(), BodyString("Not found"))),
+            _ => fun(Response::not_found(Headers::empty(), BodyString("Not found"))),
         }
     }
 }

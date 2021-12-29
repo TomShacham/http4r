@@ -3,9 +3,11 @@ use std::panic;
 use web_sys::{console};
 use wasm_bindgen::JsValue;
 use http4r_core::handler::Handler;
-use http4r_core::http_message::{body_string, js_headers_from_string, js_headers_to_string, Method, Request, Response};
+use http4r_core::headers::Headers;
+use http4r_core::http_message::{body_string, Method, Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::logging_handler::{Logger, LoggingHttpHandler, WasmClock};
+use http4r_core::uri::Uri;
 use crate::router::Router;
 
 #[wasm_bindgen]
@@ -24,12 +26,12 @@ pub fn jsRequest(method: &str, uri: &str, body: &str, headers: &str) -> JSReques
         acc.push((split.next().unwrap().to_string(), split.next().unwrap().to_string()));
         acc
     });
-    return JSRequest{
+    return JSRequest {
         method: method.to_string(),
         uri: uri.to_string(),
         body: body.to_string(),
-        headers: js_headers_to_string(&headers)
-    }
+        headers: Headers::js_headers_to_string(&headers),
+    };
 }
 
 #[wasm_bindgen]
@@ -38,6 +40,7 @@ pub struct JSResponse {
     status: u32,
     headers: String,
 }
+
 #[wasm_bindgen]
 impl JSResponse {
     pub fn body(&self) -> String {
@@ -54,11 +57,11 @@ impl JSResponse {
 #[wasm_bindgen]
 pub fn serve(req: JSRequest) -> JSResponse {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    let mut app = ExampleApp::new(LoggingHttpHandler::new(ConsoleLogger{}, WasmClock {}, Router {}));
+    let mut app = ExampleApp::new(LoggingHttpHandler::new(ConsoleLogger {}, WasmClock {}, Router {}));
     let request = Request {
-        headers: js_headers_from_string(&req.headers),
-        method: Method::from(req.method),
-        uri: req.uri,
+        headers: Headers::js_headers_from_string(&req.headers),
+        method: Method::from(&req.method),
+        uri: Uri::parse(&req.uri),
         body: BodyString(req.body.as_str()),
     };
     let mut response = JSResponse {
@@ -70,7 +73,7 @@ pub fn serve(req: JSRequest) -> JSResponse {
         response = JSResponse {
             body: body_string(res.body),
             status: res.status.value(),
-            headers: js_headers_to_string(&res.headers),
+            headers: Headers::js_headers_to_string(&res.headers.vec),
         }
     });
     response
@@ -100,6 +103,7 @@ impl<H> Handler for ExampleApp<H> where H: Handler {
 
 
 pub struct ConsoleLogger {}
+
 impl Logger for ConsoleLogger {
     fn log(&mut self, line: &str) {
         let array = js_sys::Array::from(&JsValue::from_str(line));
