@@ -10,7 +10,7 @@ impl<H> Handler for RedirectToHttpsHandler<H> where H: Handler {
     fn handle<F>(self: &mut RedirectToHttpsHandler<H>, req: Request, fun: F) -> ()
         where F: FnOnce(Response) -> () + Sized {
         if req.uri.starts_with("http:") {
-            let redirect = moved_permanently(Headers::from(vec!(("Location".to_string(), req.uri.replace("http", "https")))), BodyString(""));
+            let redirect = moved_permanently(Headers::from(vec!(("Location", req.uri.replace("http", "https").as_str()))), BodyString(""));
             return fun(redirect);
         }
         self.next_handler.handle(req, fun);

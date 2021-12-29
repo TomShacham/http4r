@@ -36,7 +36,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
-        let post_with_stream_body = post("/", Headers::from(vec!(("Content-Length".to_string(), 20000.to_string()))), BodyStream(Box::new(buffer)));
+        let post_with_stream_body = post("/", Headers::from(vec!(("Content-Length", "20000"))), BodyStream(Box::new(buffer)));
 
         client.handle(post_with_stream_body, |response| {
             match response.body {
