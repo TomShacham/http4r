@@ -1,4 +1,4 @@
-use instant::Instant;
+use std::time::Instant;
 use crate::handler::Handler;
 use crate::http_message::{Request, Response};
 
@@ -28,7 +28,7 @@ impl Logger for RustLogger {
 pub struct WasmClock {}
 impl Clock for WasmClock {
     fn now(&mut self) -> Instant {
-        instant::Instant::now()
+        Instant::now()
     }
 }
 

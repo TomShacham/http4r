@@ -50,7 +50,6 @@ dependencies = [
 name = "http4r-core"
 version = "0.1.0"
 dependencies = [
- "instant",
  "lazy_static",
  "regex",
 ]
