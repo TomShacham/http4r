@@ -18,13 +18,13 @@ impl Headers {
         headers
     }
 
-    pub fn add_header(self, header: (&str, &str)) -> Headers {
+    pub fn add_header(&self, header: (&str, &str)) -> Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
-        for existing in self.vec {
+        for existing in &self.vec {
             if existing.0 == header.0 {
                 let string = existing.clone().1.to_string() + ", " + header.1;
-                new.push((existing.0, string.clone()));
+                new.push((existing.clone().0, string.clone()));
                 exists = true
             } else {
                 new.push(existing.clone())
@@ -36,10 +36,10 @@ impl Headers {
         Headers { vec: new }
     }
 
-    pub fn replace_header(self, replacing: (&str, &str)) -> Headers {
+    pub fn replace_header(&self, replacing: (&str, &str)) -> Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
-        for existing in self.vec {
+        for existing in &self.vec {
             if existing.0 == replacing.0 {
                 new.push((existing.clone().0, replacing.1.to_string()));
                 exists = true
@@ -66,7 +66,7 @@ impl Headers {
         self.get("Content-Length").map(|x| { x.parse().unwrap() })
     }
 
-    pub(crate) fn parse_from(header_string: &str) -> Headers {
+    pub fn parse_from(header_string: &str) -> Headers {
         if header_string.is_empty() {
             return Headers::empty();
         }

@@ -48,7 +48,22 @@ mod tests {
     }
 
     #[test]
-    fn from_handles_munging(){
+    fn gives_you_new_headers_when_doing_a_thing_ie_its_immutable(){
+        let headers = Headers::from(vec!(("a", "b")));
+        let added = headers.add_header(("a", "b"));
+
+        assert_eq!(added.vec, vec!(("a".to_string(), "b, b".to_string())));
+        assert_eq!(headers.vec, vec!(("a".to_string(), "b".to_string())));
+
+        let replaced = headers.replace_header(("a", "c"));
+        let replace_again = replaced.replace_header(("b", "c"));
+
+        assert_eq!(replace_again.vec, vec!(("a".to_string(), "c".to_string()), ("b".to_string(), "c".to_string())));
+        assert_eq!(replaced.vec, vec!(("a".to_string(), "c".to_string())));
+    }
+
+    #[test]
+    fn from_does_munging(){
         let vec1 = vec!(("a", "b"), ("a", "c"));
 
         assert_eq!(Headers::from(vec1).vec, vec!(("a".to_string(), "b, c".to_string())))
