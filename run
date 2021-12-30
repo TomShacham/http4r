@@ -2,9 +2,11 @@
 
 set -x
 
-echo build and test
+echo "******** build and test *********"
 cargo test
 
-echo building WASM
+echo "******** building WASM *********"
+pushd http4r-browser
 wasm-pack --verbose build --target web
+popd
 
