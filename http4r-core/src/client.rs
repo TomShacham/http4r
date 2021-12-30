@@ -11,7 +11,10 @@ impl Handler for Client {
         where F: FnOnce(Response) -> () + Sized {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
-        let request_string = format!("{} / HTTP/1.1\r\n{}\r\n\r\n", req.method.value(), req.headers.to_wire_string());
+        let request_string = format!("{} {} HTTP/1.1\r\n{}\r\n\r\n",
+                                     req.method.value(),
+                                     req.uri.to_string(),
+                                     req.headers.to_wire_string());
 
         stream.write(request_string.as_bytes()).unwrap();
         match req.body {

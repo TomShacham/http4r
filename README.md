@@ -5,24 +5,21 @@
 - example app
   - write html file handler with appropriate content-type headers and serve 
   local webpage that loads in wasm app and runs tests
+    - routing example using match request { destructuring } which will be badass!
     - even better, do this as puppeteer suite
     - JSON body parser
     - read and write to database
-
 ---
-- get rid of instant in core somehow?
 - core api
-  - Proper uri
-      - Client passes in uri to string
-    - Response status message
-    - http version on message
-    - support http/1.0 - ie. read til socket close or EOF
-    - support trailers
-    - support chunked encoding
-    - multipart form data
-    - refactor to parser combinator
-    - bidi routing (can we do this without lenses?)
-    - default response headers, content-type, content-length, date
+  - Response status message
+  - default response headers, content-type, content-length, date
+  - http version on message
+  - support http/1.0 - ie. read til socket close or EOF
+  - support trailers
+  - support chunked encoding
+  - multipart form data
+  - refactor to parser combinator
+  - bidi routing (can we do this without lenses?)
 
 ### About
 
