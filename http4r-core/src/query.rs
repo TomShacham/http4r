@@ -2,6 +2,8 @@ pub type QueryType = (String, String);
 pub struct Query {
     pub vec: Vec<QueryType>
 }
+
+
 impl Query {
     pub fn empty() -> Query {
         Query { vec: vec!() }
@@ -21,6 +23,13 @@ impl Query {
                 Some(pair.clone().1)
             } else { None }
         })
+    }
+
+    pub fn get_all(&self, p0: &str) -> Vec<QueryType> {
+        self.vec.iter().filter(|q|{
+            q.clone().0 == p0
+        }).map(|t| (t.clone().0, t.clone().1))
+            .collect::<Vec<QueryType>>()
     }
 
     pub fn add(&self, pair: (&str, &str)) -> Query {

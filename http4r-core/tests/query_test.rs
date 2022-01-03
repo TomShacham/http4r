@@ -70,26 +70,13 @@ mod tests {
                                            ("b".to_string(), "c".to_string())));
     }
 
-    // #[test]
-    // fn from_does_munging(){
-    //     let vec1 = vec!(("a", "b"), ("a", "c"));
-    //
-    //     assert_eq!(Headers::from(vec1).vec, vec!(("a".to_string(), "b, c".to_string())))
-    // }
-    //
-    // #[test]
-    // fn parse_js_headers_from_string() {
-    //     let headers = Headers::js_headers_from_string("Content-Length: 10; Content-Type: text/html");
-    //
-    //     assert_eq!(headers.get("Content-Length").unwrap(), "10".to_string());
-    //     assert_eq!(headers.get("Content-Type").unwrap(), "text/html".to_string())
-    // }
-    //
-    // #[test]
-    // fn parse_js_headers_to_string() {
-    //     let headers = vec!(("Content-Type".to_string(), "text/plain".to_string()), ("Content-Length".to_string(), "10".to_string()));
-    //     let string = Headers::js_headers_to_string(&headers);
-    //
-    //     assert_eq!(string, "Content-Type: text/plain; Content-Length: 10");
-    // }
+    #[test]
+    fn get_all(){
+        let vec1 = vec!(("a", "b"), ("a", "c"));
+
+        assert_eq!(Query::from(vec1).get_all("a"), vec!(
+            ("a".to_string(), "b".to_string()),
+            ("a".to_string(), "c".to_string())
+        ))
+    }
 }
