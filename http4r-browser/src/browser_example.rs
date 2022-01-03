@@ -4,7 +4,7 @@ use web_sys::{console};
 use wasm_bindgen::JsValue;
 use http4r_core::handler::Handler;
 use http4r_core::headers::Headers;
-use http4r_core::http_message::{body_string, Method, Request, Response};
+use http4r_core::http_message::{body_string, HttpVersion, Method, one_pt_one, Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::logging_handler::{Logger, LoggingHttpHandler, WasmClock};
 use http4r_core::uri::Uri;
@@ -63,6 +63,7 @@ pub fn serve(req: JSRequest) -> JSResponse {
         method: Method::from(&req.method),
         uri: Uri::parse(&req.uri),
         body: BodyString(req.body.as_str()),
+        version: one_pt_one()
     };
     let mut response = JSResponse {
         body: "Not found".to_string(),

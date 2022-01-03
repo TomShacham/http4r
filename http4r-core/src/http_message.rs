@@ -56,7 +56,7 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     }
     let request_line = str::from_utf8(&first_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
 
-    let (part1, part2, _part3) = (request_line[0], request_line[1], request_line[2]);
+    let (part1, part2, part3) = (request_line[0], request_line[1], request_line[2]);
     let header_string = if headers.is_none() { "" } else {
         str::from_utf8(&headers.unwrap()).unwrap()
     };
@@ -102,19 +102,30 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     }
 
     if is_response {
+        let (major, minor) = http_version_from(part1);
         Ok(HttpMessage::Response(Response {
             status: Status::from(part2),
             headers,
             body,
+            version: HttpVersion { major, minor },
         }))
     } else {
+        let (major, minor) = http_version_from(part3);
         Ok(HttpMessage::Request(Request {
             method: Method::from(part1),
             uri: Uri::parse(part2),
             headers,
             body,
+            version: HttpVersion { major, minor },
         }))
     }
+}
+
+fn http_version_from(str: &str) -> (u8, u8) {
+    let mut version_chars = str.chars();
+    let major = version_chars.nth(0);
+    let minor = version_chars.nth(2);
+    (major.unwrap() as u8, minor.unwrap() as u8)
 }
 
 #[derive(Debug)]
@@ -174,17 +185,28 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
     }
 }
 
+pub struct HttpVersion {
+    pub major: u8,
+    pub minor: u8,
+}
+
+pub fn one_pt_one() -> HttpVersion {
+    HttpVersion { major: 1, minor: 1 }
+}
+
 pub struct Request<'a> {
     pub headers: Headers,
     pub body: Body<'a>,
     pub uri: Uri<'a>,
     pub method: Method,
+    pub version: HttpVersion,
 }
 
 pub struct Response<'a> {
     pub headers: Headers,
     pub body: Body<'a>,
     pub status: Status,
+    pub version: HttpVersion,
 }
 
 impl<'a> Request<'a> {
@@ -258,43 +280,42 @@ impl Method {
 }
 
 impl<'a> Response<'a> {
-
     pub fn ok(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: OK }
+        Response { headers, body, status: OK, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn bad_request(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: BadRequest }
+        Response { headers, body, status: BadRequest, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn internal_server_error(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: InternalServerError }
+        Response { headers, body, status: InternalServerError, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn length_required(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: LengthRequired }
+        Response { headers, body, status: LengthRequired, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn not_found(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: NotFound }
+        Response { headers, body, status: NotFound, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn moved_permanently(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: MovedPermanently }
+        Response { headers, body, status: MovedPermanently, version: HttpVersion { major: 1, minor: 1 } }
     }
 }
 
 impl<'a> Request<'a> {
     pub fn request(method: Method, uri: Uri, headers: Headers) -> Request {
-        Request { method, headers, body: BodyString(""), uri }
+        Request { method, headers, body: BodyString(""), uri, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn get(uri: Uri, headers: Headers) -> Request {
-        Request { method: GET, headers, body: BodyString(""), uri }
+        Request { method: GET, headers, body: BodyString(""), uri, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn post(uri: Uri<'a>, headers: Headers, body: Body<'a>) -> Request<'a> {
-        Request { method: POST, headers, body, uri }
+        Request { method: POST, headers, body, uri, version: HttpVersion { major: 1, minor: 1 } }
     }
 }
 

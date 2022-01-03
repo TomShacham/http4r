@@ -11,9 +11,11 @@ impl Handler for Client {
         where F: FnOnce(Response) -> () + Sized {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
-        let request_string = format!("{} {} HTTP/1.1\r\n{}\r\n\r\n",
+        let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
                                      req.method.value(),
                                      req.uri.to_string(),
+                                     req.version.major,
+                                     req.version.minor,
                                      req.headers.to_wire_string());
 
         stream.write(request_string.as_bytes()).unwrap();
@@ -51,6 +53,7 @@ pub struct Client {
 pub struct WithContentLength<H> where H: Handler {
     next_handler: H,
 }
+
 impl<H> WithContentLength<H> where H: Handler {
     pub fn new(next_handler: H) -> WithContentLength<H> {
         WithContentLength {

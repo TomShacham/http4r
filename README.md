@@ -25,8 +25,8 @@
     - read and write to database
 ---
 - core api
-  - Response status message
   - http version on message
+  - should query be separate or part of Uri
   - default response headers, content-type, content-length, date
   - support http/1.0 - ie. read til socket close or EOF
   - support http/2.0
