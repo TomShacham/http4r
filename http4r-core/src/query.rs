@@ -1,6 +1,6 @@
 pub type QueryType = (String, String);
 pub struct Query {
-    vec: Vec<QueryType>
+    pub vec: Vec<QueryType>
 }
 impl Query {
     pub fn empty() -> Query {
@@ -23,9 +23,30 @@ impl Query {
         })
     }
 
-    pub fn add(self, pair: (&str, &str)) -> Query {
-        let mut new = self.vec.clone();
+    pub fn add(&self, pair: (&str, &str)) -> Query {
+        let mut new = vec!();
+        for q in &self.vec {
+            new.push(q.clone())
+        }
         new.push((pair.0.to_string(), pair.1.to_string()));
+        Query { vec: new }
+    }
+
+    pub fn replace(&self, pair: (&str, &str)) -> Query {
+        let mut new = vec!();
+        let mut seen = false;
+        for q in &self.vec {
+            if q.0 == pair.0 && seen == false {
+                new.push((pair.0.to_string(), pair.1.to_string()));
+                seen = true
+            }
+            if q.0 != pair.0 {
+                new.push(q.clone())
+            }
+        }
+        if seen == false {
+            new.push((pair.0.to_string(), pair.1.to_string()));
+        }
         Query { vec: new }
     }
 }

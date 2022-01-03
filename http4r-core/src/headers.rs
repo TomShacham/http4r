@@ -13,12 +13,12 @@ impl Headers {
     pub fn from(pairs: Vec<(&str, &str)>) -> Headers {
         let mut headers = Headers { vec: vec!() };
         for pair in pairs {
-            headers = headers.add_header(pair)
+            headers = headers.add(pair)
         }
         headers
     }
 
-    pub fn add_header(&self, header: (&str, &str)) -> Headers {
+    pub fn add(&self, header: (&str, &str)) -> Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
         for existing in &self.vec {
@@ -36,7 +36,7 @@ impl Headers {
         Headers { vec: new }
     }
 
-    pub fn replace_header(&self, replacing: (&str, &str)) -> Headers {
+    pub fn replace(&self, replacing: (&str, &str)) -> Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
         for existing in &self.vec {
@@ -50,7 +50,7 @@ impl Headers {
         if !exists {
             new.push((replacing.0.to_string(), replacing.1.to_string()));
         }
-        return Headers { vec: new };
+        Headers { vec: new }
     }
 
     pub fn get(&self, name: &str) -> Option<String> {
@@ -72,7 +72,7 @@ impl Headers {
         }
         header_string.split("\r\n").fold(Headers::empty(), |acc, pair| {
             let pair = pair.split(": ").collect::<Vec<&str>>();
-            acc.add_header((pair[0], pair[1]))
+            acc.add((pair[0], pair[1]))
         })
     }
 
@@ -87,7 +87,7 @@ impl Headers {
     pub fn js_headers_from_string(str: &str) -> Headers {
         str.split("; ").fold(Headers::empty(), |acc: Headers, next: &str| {
             let mut split = next.split(": ");
-            acc.add_header((split.next().unwrap(), split.next().unwrap()))
+            acc.add((split.next().unwrap(), split.next().unwrap()))
         })
     }
 

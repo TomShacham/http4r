@@ -19,30 +19,30 @@ mod tests {
     #[test]
     fn add_headers() {
         let headers = Headers::from(vec!(("a", "b")));
-        assert_eq!(headers.add_header(("some", "other")).vec,
+        assert_eq!(headers.add(("some", "other")).vec,
                    vec!(("a".to_string(), "b".to_string()), ("some".to_string(), "other".to_string())));
 
-        let added = Headers::empty().add_header(("foo", "bar"));
+        let added = Headers::empty().add(("foo", "bar"));
         assert_eq!(added.vec, vec!(("foo".to_string(), "bar".to_string())));
 
-        let added_again = added.add_header(("foo", "baz"));
+        let added_again = added.add(("foo", "baz"));
         assert_eq!(added_again.vec, vec!(("foo".to_string(), "bar, baz".to_string())));
 
-        assert_eq!(added_again.add_header(("foo", "quux")).vec,
+        assert_eq!(added_again.add(("foo", "quux")).vec,
                    vec!(("foo".to_string(), "bar, baz, quux".to_string())));
     }
 
     #[test]
     fn replace_headers() {
         let headers = Headers::from(vec!(("a", "b")));
-        let added = headers.add_header(("a", "c"));
+        let added = headers.add(("a", "c"));
 
         assert_eq!(added.vec, vec!(("a".to_string(), "b, c".to_string())));
 
-        let replaced = added.replace_header(("a", "b"));
+        let replaced = added.replace(("a", "b"));
         assert_eq!(replaced.vec, vec!(("a".to_string(), "b".to_string())));
 
-        let add_when_using_replace = replaced.replace_header(("new", "value"));
+        let add_when_using_replace = replaced.replace(("new", "value"));
         let with_new_value = vec!(("a".to_string(), "b".to_string()), ("new".to_string(), "value".to_string()));
         assert_eq!(add_when_using_replace.vec, with_new_value)
     }
@@ -50,13 +50,13 @@ mod tests {
     #[test]
     fn gives_you_new_headers_when_doing_a_thing_ie_its_immutable(){
         let headers = Headers::from(vec!(("a", "b")));
-        let added = headers.add_header(("a", "b"));
+        let added = headers.add(("a", "b"));
 
         assert_eq!(added.vec, vec!(("a".to_string(), "b, b".to_string())));
         assert_eq!(headers.vec, vec!(("a".to_string(), "b".to_string())));
 
-        let replaced = headers.replace_header(("a", "c"));
-        let replace_again = replaced.replace_header(("b", "c"));
+        let replaced = headers.replace(("a", "c"));
+        let replace_again = replaced.replace(("b", "c"));
 
         assert_eq!(replace_again.vec, vec!(("a".to_string(), "c".to_string()), ("b".to_string(), "c".to_string())));
         assert_eq!(replaced.vec, vec!(("a".to_string(), "c".to_string())));

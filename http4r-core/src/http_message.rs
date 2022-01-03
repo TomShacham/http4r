@@ -80,7 +80,7 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let content_length = headers.content_length_header();
     match content_length {
         Some(_) if is_req_and_method_cannot_have_body => {
-            headers = headers.replace_header(("Content-Length", "0"));
+            headers = headers.replace(("Content-Length", "0"));
             body = Body::BodyString("")
         }
         Some(content_length) if content_length + pre_body_index <= buffer.len() => {
@@ -154,7 +154,7 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
         HttpMessage::Request(request) => {
             if request.headers.content_length_header().is_none() {
                 return HttpMessage::Request(Request {
-                    headers: request.headers.add_header(("Content-Length", body_length(&request.body).to_string().as_str())),
+                    headers: request.headers.add(("Content-Length", body_length(&request.body).to_string().as_str())),
                     ..request
                 });
             } else {
@@ -164,7 +164,7 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
         HttpMessage::Response(response) => {
             if response.headers.content_length_header().is_none() {
                 return HttpMessage::Response(Response {
-                    headers: response.headers.add_header(("Content-Length", body_length(&response.body).to_string().as_str())),
+                    headers: response.headers.add(("Content-Length", body_length(&response.body).to_string().as_str())),
                     ..response
                 });
             } else {
@@ -197,7 +197,7 @@ impl<'a> Request<'a> {
 
     pub fn with_header(self, pair: (&str, &str)) -> Request<'a> {
         Request {
-            headers: self.headers.add_header(pair),
+            headers: self.headers.add(pair),
             ..self
         }
     }
