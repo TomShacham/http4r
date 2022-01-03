@@ -2,7 +2,7 @@ use std::fmt;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub struct Uri<'a> {
     pub scheme: Option<&'a str>,
     pub authority: Option<&'a str>,
@@ -27,11 +27,24 @@ impl<'a> Uri<'a> {
         }
     }
 
+    pub fn with_path(self, path: &'a str) -> Uri<'a> {
+        Uri { path, ..self }
+    }
+
     pub fn with_scheme(self, scheme: &'a str) -> Uri<'a> {
-        Uri {
-            scheme: Some(scheme),
-            ..self
-        }
+        Uri { scheme: Some(scheme), ..self }
+    }
+
+    pub fn with_authority(self, authority: &'a str) -> Uri<'a> {
+        Uri { authority: Some(authority), ..self }
+    }
+
+    pub fn with_query(self, query: &'a str) -> Uri<'a> {
+        Uri { query: Some(query), ..self }
+    }
+
+    pub fn with_fragment(self, fragment: &'a str) -> Uri<'a> {
+        Uri { fragment: Some(fragment), ..self }
     }
 }
 

@@ -2,7 +2,7 @@ pub struct Headers {
     pub vec: HeadersType,
 }
 
-type HeaderType = (String, String);
+pub type HeaderType = (String, String);
 pub type HeadersType = Vec<HeaderType>;
 
 impl Headers {

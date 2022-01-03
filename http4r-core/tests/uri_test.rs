@@ -7,11 +7,11 @@ mod tests {
 
     #[test]
     fn can_parse_uri() {
-        let uri = Uri::parse("http://authority/some/path?query=string#fragment");
+        let uri = Uri::parse("http://authority/some/path?query=string/with/slashes/and?question?marks#fragment");
         assert_eq!(uri.scheme, Some("http"));
         assert_eq!(uri.authority, Some("authority"));
         assert_eq!(uri.path, "/some/path");
-        assert_eq!(uri.query, Some("query=string"));
+        assert_eq!(uri.query, Some("query=string/with/slashes/and?question?marks"));
         assert_eq!(uri.fragment, Some("fragment"));
     }
 
@@ -53,5 +53,23 @@ mod tests {
                 panic!("Should have matched");
             }
         }
+    }
+
+    #[test]
+    fn can_replace_bits_and_doesnt_mutate() {
+        let uri = Uri::parse("/");
+        assert_eq!(uri.with_scheme("https").to_string(), "https:/");
+        assert_eq!(uri.to_string(), "/"); // not mutated by above
+        assert_eq!(Uri::parse("/").with_path("/new/path").to_string(), "/new/path");
+        assert_eq!(Uri::parse("/").with_authority("user@password").to_string(), "//user@password/");
+        assert_eq!(Uri::parse("/").with_query("foo=bar&baz=quux").to_string(), "/?foo=bar&baz=quux");
+        assert_eq!(Uri::parse("/").with_fragment("frag").to_string(), "/#frag");
+
+        assert_eq!(Uri::parse("/")
+                       .with_path("/new/path")
+                       .with_authority("user@password")
+                       .with_scheme("https")
+                       .with_query("foo=bar&baz=quux")
+                       .with_fragment("frag").to_string(), "https://user@password/new/path?foo=bar&baz=quux#frag");
     }
 }

@@ -2,5 +2,5 @@
 
 members = [
     "http4r-core",
-    "http4r-browser",
+    "http4r-browser"
 ]
