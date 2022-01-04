@@ -25,14 +25,14 @@
     - read and write to database
 ---
 - core api
-  - http version on message
+  - support chunked encoding
+  - support trailers
+  - multipart form data
+  - todos in http_test eg set-cookie header special case
   - should query be separate or part of Uri
   - default response headers, content-type, content-length, date
   - support http/1.0 - ie. read til socket close or EOF
   - support http/2.0
-  - support trailers
-  - support chunked encoding
-  - multipart form data
   - refactor to parser combinator
   - bidi routing (can we do this without lenses?)
 
