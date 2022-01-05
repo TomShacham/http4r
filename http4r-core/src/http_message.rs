@@ -28,40 +28,12 @@ impl<'a> HttpMessage<'a> {
 }
 
 pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<HttpMessage, MessageError> {
-    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
-    let mut pre_body_index = 0;
-    let mut end_of_start_line = 0;
-    let mut first_line = None;
-    let mut headers = None;
-    for char in buffer {
-        if first_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
-            first_line = Some(&buffer[..pre_body_index]);
-            end_of_start_line = pre_body_index;
-        }
-        if !first_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
-            let end_of_headers = pre_body_index - prev.len();
-            if end_of_start_line > end_of_headers {
-                headers = None
-            } else {
-                headers = Some(&buffer[end_of_start_line..end_of_headers]);
-            }
-            break;
-        }
-        prev.remove(0);
-        prev.push(*char as char);
-        if pre_body_index > buffer.len() {
-            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
-        }
-        pre_body_index += 1;
+    let metadata_result = start_line_and_headers_from(buffer);
+    if metadata_result.is_err() {
+        return Err(metadata_result.err().unwrap())
     }
-    let request_line = str::from_utf8(&first_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
-
-    let (part1, part2, part3) = (request_line[0], request_line[1], request_line[2]);
-    let header_string = if headers.is_none() { "" } else {
-        str::from_utf8(&headers.unwrap()).unwrap()
-    };
-    let mut headers = Headers::parse_from(header_string);
-
+    let (end_of_headers_index, start_line, mut headers) = metadata_result.ok().unwrap();
+    let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
     let is_req_and_method_can_have_body = !is_response && method_can_have_body;
@@ -83,14 +55,14 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
             headers = headers.replace(("Content-Length", "0"));
             body = Body::BodyString("")
         }
-        Some(content_length) if content_length + pre_body_index <= buffer.len() => {
-            let result = str::from_utf8(&buffer[pre_body_index..(content_length + pre_body_index)]).unwrap();
+        Some(content_length) if content_length + end_of_headers_index <= buffer.len() => {
+            let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
             body = Body::BodyString(result)
         }
         Some(content_length) => {
-            if first_read > pre_body_index {
-                let body_so_far = &buffer[pre_body_index..first_read];
-                let body_so_far_size = first_read - pre_body_index;
+            if first_read > end_of_headers_index {
+                let body_so_far = &buffer[end_of_headers_index..first_read];
+                let body_so_far_size = first_read - end_of_headers_index;
                 let rest = stream.take(content_length as u64 - body_so_far_size as u64);
                 body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
             } else {
@@ -119,6 +91,42 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
             version: HttpVersion { major, minor },
         }))
     }
+}
+
+fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Headers), MessageError> {
+    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
+    let mut end_of_headers_index = 0;
+    let mut end_of_start_line = 0;
+    let mut first_line = None;
+    let mut headers = None;
+    for char in buffer {
+        if first_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
+            first_line = Some(&buffer[..end_of_headers_index]);
+            end_of_start_line = end_of_headers_index;
+        }
+        if !first_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
+            let end_of_headers = end_of_headers_index - prev.len();
+            if end_of_start_line > end_of_headers {
+                headers = None
+            } else {
+                headers = Some(&buffer[end_of_start_line..end_of_headers]);
+            }
+            break;
+        }
+        prev.remove(0);
+        prev.push(*char as char);
+        if end_of_headers_index > buffer.len() {
+            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
+        }
+        end_of_headers_index += 1;
+    }
+    let header_string = if headers.is_none() { "" } else {
+        str::from_utf8(&headers.unwrap()).unwrap()
+    };
+    let headers = Headers::parse_from(header_string);
+    let start_line = str::from_utf8(&first_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
+
+    Ok((end_of_headers_index, start_line, headers))
 }
 
 fn http_version_from(str: &str) -> (u8, u8) {
