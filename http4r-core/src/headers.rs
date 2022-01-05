@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 pub struct Headers {
     pub vec: HeadersType,
 }
@@ -62,8 +64,14 @@ impl Headers {
         None
     }
 
-    pub fn content_length_header(&self) -> Option<usize> {
-        self.get("Content-Length").map(|x| { x.parse().unwrap() })
+    pub fn has(&self, header_name: &str) -> bool {
+        return self.get(header_name).is_some()
+    }
+
+    pub fn content_length_header(&self) -> Option<Result<usize, ParseIntError>>{
+        self.get("Content-Length").map(|x| {
+            x.parse::<usize>()
+        })
     }
 
     pub fn parse_from(header_string: &str) -> Headers {

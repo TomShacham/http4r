@@ -1,10 +1,12 @@
+use std::any::Any;
 use std::io::{copy, Read, Write};
 use std::net::TcpStream;
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message;
-use crate::http_message::{HttpMessage, message_from, Request, Response, with_content_length};
+use crate::http_message::{HttpMessage, message_from, MessageError, Request, Response, with_content_length};
 use crate::http_message::Body::{BodyStream, BodyString};
+use crate::http_message::MessageError::InvalidContentLength;
 
 impl Handler for Client {
     fn handle<F>(self: &mut Client, mut req: Request, fun: F) -> ()
@@ -37,7 +39,7 @@ impl Handler for Client {
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,
-            _ => Response::bad_request(Headers::empty(), BodyString("nah"))
+            _ => Response::bad_request(Headers::empty(), BodyString("will happen if server replies with invalid response"))
         };
 
         fun(response)

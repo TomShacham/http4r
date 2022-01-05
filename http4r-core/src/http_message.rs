@@ -1,3 +1,4 @@
+use std::fmt::{Display, format, Formatter};
 use std::io::Read;
 use std::net::TcpStream;
 use std::str;
@@ -38,7 +39,7 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
     let is_req_and_method_can_have_body = !is_response && method_can_have_body;
     let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
-    let no_content_length_or_transfer_encoding = headers.content_length_header().is_none() &&
+    let no_content_length_or_transfer_encoding = headers.has("Content-Length") &&
         headers.get("Transfer-Encoding").is_none();
 
     if (is_req_and_method_can_have_body && no_content_length_or_transfer_encoding)
@@ -55,11 +56,11 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
             headers = headers.replace(("Content-Length", "0"));
             body = Body::BodyString("")
         }
-        Some(content_length) if content_length + end_of_headers_index <= buffer.len() => {
+        Some(Ok(content_length)) if content_length + end_of_headers_index <= buffer.len() => {
             let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
             body = Body::BodyString(result)
         }
-        Some(content_length) => {
+        Some(Ok(content_length)) => {
             if first_read > end_of_headers_index {
                 let body_so_far = &buffer[end_of_headers_index..first_read];
                 let body_so_far_size = first_read - end_of_headers_index;
@@ -69,6 +70,9 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
                 let body_stream = stream.take(content_length as u64);
                 body = Body::BodyStream(Box::new(body_stream));
             }
+        },
+        Some(Err(error)) => {
+            return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
         }
         _ => body = Body::BodyString("")
     }
@@ -138,8 +142,15 @@ fn http_version_from(str: &str) -> (u8, u8) {
 
 #[derive(Debug)]
 pub enum MessageError {
+    InvalidContentLength(String),
     NoContentLengthOrTransferEncoding(String),
     HeadersTooBig(String),
+}
+
+impl Display for MessageError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl<'a> Response<'a> {
@@ -171,7 +182,7 @@ pub fn body_length(body: &Body) -> u32 {
 pub fn with_content_length(message: HttpMessage) -> HttpMessage {
     match message {
         HttpMessage::Request(request) => {
-            if request.headers.content_length_header().is_none() {
+            if ! request.headers.has("Content-Length") {
                 return HttpMessage::Request(Request {
                     headers: request.headers.add(("Content-Length", body_length(&request.body).to_string().as_str())),
                     ..request
@@ -181,7 +192,7 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
             }
         }
         HttpMessage::Response(response) => {
-            if response.headers.content_length_header().is_none() {
+            if ! response.headers.has("Content-Length") {
                 return HttpMessage::Response(Response {
                     headers: response.headers.add(("Content-Length", body_length(&response.body).to_string().as_str())),
                     ..response
