@@ -6,7 +6,7 @@ pub struct LoggingHttpHandler<H, C, L> where H: Handler, C: Clock, L: Logger {
     pub log: Vec<String>,
     pub next_handler: H,
     pub clock: C,
-    pub logger: L
+    pub logger: L,
 }
 
 pub trait Clock {
@@ -19,6 +19,7 @@ pub trait Logger {
 
 
 pub struct RustLogger {}
+
 impl Logger for RustLogger {
     fn log(&mut self, line: &str) {
         println!("{}", line)
@@ -26,6 +27,7 @@ impl Logger for RustLogger {
 }
 
 pub struct WasmClock {}
+
 impl Clock for WasmClock {
     fn now(&mut self) -> Instant {
         Instant::now()
@@ -38,14 +40,14 @@ impl<H, C, L> LoggingHttpHandler<H, C, L> where H: Handler, C: Clock, L: Logger 
             log: vec!(),
             next_handler: next,
             clock,
-            logger
+            logger,
         }
     }
 }
 
 impl<H, C, L> Handler for LoggingHttpHandler<H, C, L> where H: Handler, C: Clock, L: Logger {
-     fn handle<F>(self: &mut LoggingHttpHandler<H, C, L>, req: Request, fun: F) -> ()
-         where F: FnOnce(Response) -> () + Sized {
+    fn handle<F>(self: &mut LoggingHttpHandler<H, C, L>, req: Request, fun: F) -> ()
+        where F: FnOnce(Response) -> () + Sized {
         let start = self.clock.now();
         let req_string = format!("{} to {}", req.method.value().to_string(), req.uri);
         self.next_handler.handle(req, |res| {

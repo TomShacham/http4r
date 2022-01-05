@@ -1,5 +1,9 @@
 ## http4r
 
+### I'm new to Rust or I'm a bit rusty
+
+`rustup` to update your rust and cargo version
+
 ### About
 
 - http4r is based on [Dan's](https://github.com/bodar/) projects
