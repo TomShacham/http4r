@@ -9,7 +9,7 @@
 - http4r is based on [Dan's](https://github.com/bodar/) projects
   [utterlyidle](https://github.com/bodar/utterlyidle)
   and [http-handler.rust](https://github.com/danielbodart/http-handler.rust)
-  and [http4k](https://www.http4k.org/) 
+  and is based on [http4k](https://www.http4k.org/) inspired by [Mr Dave](https://github.com/daviddenton) and [Ivan Sanchez](https://github.com/s4nchez)
 - it is based on [Server as a Function](https://monkey.org/~marius/funsrv.pdf):
   - composable http handlers implement `(Request) -> Response`
   - immutable `Request`, `Response`, `Headers` etc
