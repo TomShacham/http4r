@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::io::Read;
 use std::net::TcpStream;
 use std::str;
@@ -30,7 +31,7 @@ impl<'a> HttpMessage<'a> {
 pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<HttpMessage, MessageError> {
     let metadata_result = start_line_and_headers_from(buffer);
     if metadata_result.is_err() {
-        return Err(metadata_result.err().unwrap())
+        return Err(metadata_result.err().unwrap());
     }
     let (end_of_headers_index, start_line, mut headers) = metadata_result.ok().unwrap();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
@@ -38,7 +39,7 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
     let is_req_and_method_can_have_body = !is_response && method_can_have_body;
     let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
-    let no_content_length_or_transfer_encoding = headers.content_length_header().is_none() &&
+    let no_content_length_or_transfer_encoding = !headers.has("Content-Length") &&
         headers.get("Transfer-Encoding").is_none();
 
     if (is_req_and_method_can_have_body && no_content_length_or_transfer_encoding)
@@ -48,18 +49,21 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
 
     // todo() support trailers
 
+
     let body;
     let content_length = headers.content_length_header();
     match content_length {
         Some(_) if is_req_and_method_cannot_have_body => {
             headers = headers.replace(("Content-Length", "0"));
-            body = Body::BodyString("")
+            body = Body::empty()
         }
-        Some(content_length) if content_length + end_of_headers_index <= buffer.len() => {
+        // we have read the whole body in the first read
+        Some(Ok(content_length)) if first_read > end_of_headers_index
+            && (first_read - end_of_headers_index) == content_length => {
             let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
             body = Body::BodyString(result)
         }
-        Some(content_length) => {
+        Some(Ok(content_length)) => {
             if first_read > end_of_headers_index {
                 let body_so_far = &buffer[end_of_headers_index..first_read];
                 let body_so_far_size = first_read - end_of_headers_index;
@@ -70,7 +74,10 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
                 body = Body::BodyStream(Box::new(body_stream));
             }
         }
-        _ => body = Body::BodyString("")
+        Some(Err(error)) => {
+            return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
+        }
+        _ => body = Body::empty()
     }
 
     if is_response {
@@ -123,6 +130,7 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
     let header_string = if headers.is_none() { "" } else {
         str::from_utf8(&headers.unwrap()).unwrap()
     };
+
     let headers = Headers::parse_from(header_string);
     let start_line = str::from_utf8(&first_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
 
@@ -138,14 +146,21 @@ fn http_version_from(str: &str) -> (u8, u8) {
 
 #[derive(Debug)]
 pub enum MessageError {
+    InvalidContentLength(String),
     NoContentLengthOrTransferEncoding(String),
     HeadersTooBig(String),
+}
+
+impl Display for MessageError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl<'a> Response<'a> {
     pub fn status_line_and_headers(&self) -> String {
         let mut response = String::new();
-        let http = format!("HTTP/1.1 {} {}", &self.status.to_string(), &self.status.value());
+        let http = format!("HTTP/1.1 {} {}", &self.status.value(), &self.status.to_string());
         response.push_str(&http);
         response.push_str("\r\n");
 
@@ -161,6 +176,12 @@ pub enum Body<'a> {
     BodyStream(Box<dyn Read + 'a>),
 }
 
+impl<'a> Body<'a> {
+    pub fn empty() -> Body<'a> {
+        BodyString("")
+    }
+}
+
 pub fn body_length(body: &Body) -> u32 {
     match body {
         BodyString(str) => str.len() as u32,
@@ -171,7 +192,7 @@ pub fn body_length(body: &Body) -> u32 {
 pub fn with_content_length(message: HttpMessage) -> HttpMessage {
     match message {
         HttpMessage::Request(request) => {
-            if request.headers.content_length_header().is_none() {
+            if !request.headers.has("Content-Length") {
                 return HttpMessage::Request(Request {
                     headers: request.headers.add(("Content-Length", body_length(&request.body).to_string().as_str())),
                     ..request
@@ -181,7 +202,7 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
             }
         }
         HttpMessage::Response(response) => {
-            if response.headers.content_length_header().is_none() {
+            if !response.headers.has("Content-Length") {
                 return HttpMessage::Response(Response {
                     headers: response.headers.add(("Content-Length", body_length(&response.body).to_string().as_str())),
                     ..response
@@ -315,11 +336,11 @@ impl<'a> Response<'a> {
 
 impl<'a> Request<'a> {
     pub fn request(method: Method, uri: Uri, headers: Headers) -> Request {
-        Request { method, headers, body: BodyString(""), uri, version: HttpVersion { major: 1, minor: 1 } }
+        Request { method, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn get(uri: Uri, headers: Headers) -> Request {
-        Request { method: GET, headers, body: BodyString(""), uri, version: HttpVersion { major: 1, minor: 1 } }
+        Request { method: GET, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 } }
     }
 
     pub fn post(uri: Uri<'a>, headers: Headers, body: Body<'a>) -> Request<'a> {
@@ -363,8 +384,9 @@ impl Status {
     }
     pub fn from(str: &str) -> Self {
         match str.to_lowercase().as_str() {
-            "ok" => OK,
-            "not found" => NotFound,
+            "200" => OK,
+            "400" => BadRequest,
+            "404" => NotFound,
             _ => Unknown
         }
     }

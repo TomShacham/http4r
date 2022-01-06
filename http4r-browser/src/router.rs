@@ -1,7 +1,7 @@
 use http4r_core::handler::Handler;
 use http4r_core::headers::Headers;
 use http4r_core::http_message;
-use http4r_core::http_message::{Request, Response};
+use http4r_core::http_message::{Body, Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::uri::Uri;
 
@@ -26,7 +26,7 @@ impl Handler for NicerRouter {
             Request{ uri: Uri {path: "/some/path", .. }, .. } =>  {
                 fun(Response::ok(Headers::empty(), BodyString(req.method.value().as_str())));
             }
-            _ => fun(Response::not_found(Headers::empty(), BodyString("")))
+            _ => fun(Response::not_found(Headers::empty(), Body::empty()))
         }
     }
 }

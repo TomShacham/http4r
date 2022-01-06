@@ -61,7 +61,7 @@ impl Server where {
         let result = message_from(buffer, stream.try_clone().unwrap(), first_read);
 
         match result {
-            Err(MessageError::HeadersTooBig(msg)) => {
+            Err(MessageError::HeadersTooBig(msg)) | Err(MessageError::InvalidContentLength(msg)) => {
                 let response = Response::bad_request(Headers::empty(), BodyString(msg.as_str()));
                 Self::write_response_to_wire(&mut stream, response)
             }
