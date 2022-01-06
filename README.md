@@ -29,6 +29,7 @@
     - read and write to database
 ---
 - core api
+  - test the body fitting in the first read stuff  
   - support chunked encoding
   - support trailers
   - multipart form data

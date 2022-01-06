@@ -1,8 +1,7 @@
 use http4r_core::http_message::Status::{NotFound, OK};
 use http4r_core::handler::Handler;
-use http4r_core::headers::Headers;
-use http4r_core::http_message::Body::BodyString;
-use http4r_core::http_message::{Request, Response};
+
+mod common;
 
 #[cfg(test)]
 mod tests {
@@ -13,11 +12,11 @@ mod tests {
     use http4r_core::http_message::{body_string, Request, Response};
     use http4r_core::http_message::Body::{BodyStream, BodyString};
     use http4r_core::http_message::Method::{CONNECT, GET, HEAD, OPTIONS, TRACE};
-    use http4r_core::http_message::Status::BadRequest;
     use http4r_core::logging_handler::{LoggingHttpHandler, RustLogger, WasmClock};
     use http4r_core::redirect_to_https_handler::RedirectToHttpsHandler;
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
+    use crate::common::{PassThroughHandler, Router};
     use super::*;
 
     #[test]
@@ -124,44 +123,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn duplicate_different_content_length_headers_result_in_bad_request() {
-
-        let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
-
-        let mut client = WithContentLength::new(
-            Client { base_uri: String::from("127.0.0.1"), port: server.port }
-        );
-
-        client.handle( Request::post(Uri::parse("/bob"), Headers::from(
-            vec!( ("Content-length", "10"), ("Content-length", "20") )
-        ), BodyString("hello")), | response: Response | {
-            assert_eq!(BadRequest, response.status);
-            assert_eq!("", body_string(response.body));
-        })
-    }
 }
 
-struct Router {}
-
-impl Handler for Router {
-    fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
-        let response = match req.uri.to_string().as_str() {
-            "/" => Response::ok(Headers::empty(), BodyString("")),
-            _ => Response::not_found(Headers::empty(), BodyString("Not found")),
-        };
-        fun(response)
-    }
-}
-
-struct PassThroughHandler {}
-
-impl Handler for PassThroughHandler {
-    fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
-        fun(Response::ok(req.headers, req.body))
-    }
-}
 
 //todo() DO NOT EXPECT A CONTENT LENGTH FOR HEAD,OPTIONS,CONNECT,204,1XX ETC
 //todo() handle duplicate Content-lengths Content-Length: 42, 42

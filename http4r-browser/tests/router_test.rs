@@ -4,7 +4,7 @@ mod tests {
     use http4r_core::handler::Handler;
     use http4r_core::headers::Headers;
     use http4r_core::uri::Uri;
-    use http4r_core::http_message::{body_string, Request};
+    use http4r_core::http_message::{Body, body_string, Request};
     use http4r_core::http_message::Body::BodyString;
     use http4r_core::http_message::Status::OK;
 
@@ -17,7 +17,7 @@ mod tests {
             assert_eq!(body_string(res.body), "GET");
         });
 
-        router.handle(Request::post(Uri::parse("/some/path"), Headers::empty(), BodyString("")), |res| {
+        router.handle(Request::post(Uri::parse("/some/path"), Headers::empty(), Body::empty()), |res| {
             assert_eq!(res.status, OK);
             assert_eq!(body_string(res.body), "POST");
         })

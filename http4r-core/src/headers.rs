@@ -1,4 +1,3 @@
-use std::num::ParseIntError;
 
 pub struct Headers {
     pub vec: HeadersType,
@@ -65,13 +64,29 @@ impl Headers {
     }
 
     pub fn has(&self, header_name: &str) -> bool {
-        return self.get(header_name).is_some()
+        return self.get(header_name).is_some();
     }
 
-    pub fn content_length_header(&self) -> Option<Result<usize, ParseIntError>>{
-        self.get("Content-Length").map(|x| {
-            x.parse::<usize>()
-        })
+    pub fn content_length_header(&self) -> Option<Result<usize, String>> {
+        let value = self.get("Content-Length");
+        let value = Self::parse_or_else_value(value);
+        match value {
+            Some(Err(ref header_value)) => {
+                let split = header_value.split(", ").map(|it| it.to_string()).collect::<Vec<String>>();
+                let first = split.first().map(|it| it.to_string());
+                if split.iter().all(|v| v == first.as_ref().unwrap()) {
+                    Self::parse_or_else_value(first)
+                } else {
+                    value.clone()
+                }
+            }
+            _ => value
+        }
+    }
+
+    fn parse_or_else_value(value: Option<String>) -> Option<Result<usize, String>> {
+        value.as_ref().map(|x| x.parse::<usize>())
+            .map(|r| r.map_err(|_| value.unwrap()))
     }
 
     pub fn parse_from(header_string: &str) -> Headers {
@@ -106,6 +121,5 @@ impl Headers {
         }).collect::<Vec<String>>()
             .join("; ")
     }
-
 }
 
