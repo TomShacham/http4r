@@ -29,7 +29,7 @@
     - read and write to database
 ---
 - core api
-  - test the body fitting in the first read stuff  
+  - test the body fitting in the first read stuff - expose underlying stream read/write in order to test?
   - support chunked encoding
   - support trailers
   - multipart form data
