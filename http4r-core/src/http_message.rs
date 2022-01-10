@@ -37,14 +37,10 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
-    let is_req_and_method_can_have_body = !is_response && method_can_have_body;
     let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
-    let no_content_length_or_transfer_encoding = !headers.has("Content-Length") &&
-        headers.get("Transfer-Encoding").is_none();
 
-    if (is_req_and_method_can_have_body && no_content_length_or_transfer_encoding)
-        || is_response && no_content_length_or_transfer_encoding {
-        return Err(MessageError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
+    if let Err(e) = check_valid_content_length_or_transfer_encoding(&mut headers, is_response, method_can_have_body) {
+        return Err(e)
     }
 
     // todo() support trailers
@@ -98,6 +94,18 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
             version: HttpVersion { major, minor },
         }))
     }
+}
+
+fn check_valid_content_length_or_transfer_encoding(headers: &mut Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
+    let is_req_and_method_can_have_body = !is_response && method_can_have_body;
+    let no_content_length_or_transfer_encoding = !headers.has("Content-Length") &&
+        headers.get("Transfer-Encoding").is_none();
+
+    if (is_req_and_method_can_have_body && no_content_length_or_transfer_encoding)
+        || is_response && no_content_length_or_transfer_encoding {
+        return Err(MessageError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
+    }
+    Ok(())
 }
 
 fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Headers), MessageError> {
