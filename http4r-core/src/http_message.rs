@@ -28,7 +28,7 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Result<HttpMessage, MessageError> {
+pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usize, buffer2: &'a mut [u8]) -> Result<HttpMessage<'a>, MessageError> {
     let metadata_result = start_line_and_headers_from(buffer);
     if metadata_result.is_err() {
         return Err(metadata_result.err().unwrap());
@@ -40,40 +40,60 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
     let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
 
     if let Err(e) = check_valid_content_length_or_transfer_encoding(&mut headers, is_response, method_can_have_body) {
-        return Err(e)
+        return Err(e);
     }
 
     // todo() support trailers
 
-
     let body;
     let content_length = headers.content_length_header();
-    match content_length {
-        Some(_) if is_req_and_method_cannot_have_body => {
-            headers = headers.replace(("Content-Length", "0"));
-            body = Body::empty()
+    let transfer_encoding = headers.get("Transfer-Encoding");
+    if headers.has("Content-Length") && transfer_encoding.is_some() {
+        headers = headers.remove("Content-Length");
+    }
+
+    if let Some(_encoding) = transfer_encoding {
+        let body_so_far = &buffer[end_of_headers_index..first_read];
+        let (mut finished, mut total_read) = read_chunk(body_so_far, buffer2);
+        while !finished {
+            let mut buffer = [0 as u8; 16384];
+            let next = stream.read(&mut buffer);
+            let (is_finished, just_read) = read_chunk(&buffer, buffer2);
+            total_read += just_read;
+            finished = is_finished;
         }
-        // we have read the whole body in the first read
-        Some(Ok(content_length)) if first_read > end_of_headers_index
-            && (first_read - end_of_headers_index) == content_length => {
-            let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
-            body = Body::BodyString(result)
-        }
-        Some(Ok(content_length)) => {
-            if first_read > end_of_headers_index {
-                let body_so_far = &buffer[end_of_headers_index..first_read];
-                let body_so_far_size = first_read - end_of_headers_index;
-                let rest = stream.take(content_length as u64 - body_so_far_size as u64);
-                body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
-            } else {
-                let body_stream = stream.take(content_length as u64);
-                body = Body::BodyStream(Box::new(body_stream));
+        headers = headers.add(("Content-Length", total_read.to_string().as_str()))
+            .remove("Transfer-Encoding");
+        body = BodyStream(Box::new(buffer2.take(total_read as u64)));
+    } else {
+        match content_length {
+            Some(_) if is_req_and_method_cannot_have_body => {
+                headers = headers.replace(("Content-Length", "0"));
+                body = Body::empty()
             }
+            // we have read the whole body in the first read
+            Some(Ok(content_length)) if first_read > end_of_headers_index
+                && (first_read - end_of_headers_index) == content_length => {
+                let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
+                body = Body::BodyString(result)
+            }
+            Some(Ok(content_length)) => {
+                if first_read > end_of_headers_index {
+                    let body_so_far = &buffer[end_of_headers_index..first_read];
+                    let body_so_far_size = first_read - end_of_headers_index;
+                    let rest = stream.take(content_length as u64 - body_so_far_size as u64);
+                    body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
+                } else {
+                    let body_stream = stream.take(content_length as u64);
+                    body = Body::BodyStream(Box::new(body_stream));
+                }
+            }
+            Some(Err(error)) => {
+                return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
+            }
+            _ => body = Body::empty()
         }
-        Some(Err(error)) => {
-            return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
-        }
-        _ => body = Body::empty()
+
     }
 
     if is_response {
@@ -94,6 +114,48 @@ pub fn message_from(buffer: &[u8], stream: TcpStream, first_read: usize) -> Resu
             version: HttpVersion { major, minor },
         }))
     }
+}
+
+fn read_chunk(body_so_far: &[u8], read: &mut [u8]) -> (bool, usize) {
+    let mut chunk_size: usize = 0;
+    let mut total_size: usize = 0;
+    let mut mode = "metadata";
+    let mut finished = false;
+    let mut read_of_this_chunk: usize = 0;
+    for octet in body_so_far {
+        let on_boundary = *octet == b'\n' || *octet == b'\r';
+        if mode == "metadata" && !on_boundary {
+            // if we have a digit, multiply last digit by 10 and add this one
+            // if first digit we encounter is 0 then we'll multiply 0 by 10 and get 0
+            // ...
+            chunk_size = (chunk_size * 10) + (*octet as char).to_digit(10).unwrap() as usize;
+            if chunk_size == 0 {
+                finished = true;
+                break; // we have encountered the 0 chunk
+            }
+        } else if mode == "metadata" && on_boundary {
+            // if we're on the boundary, continue, or change mode to read once we've seen \n
+            if *octet == b'\n' {
+                mode = "read";
+            }
+            continue;
+        }
+        if mode == "read" && read_of_this_chunk < chunk_size {
+            read[total_size + read_of_this_chunk] = *octet;
+            read_of_this_chunk += 1;
+        } else if mode == "read" && on_boundary {
+            // if we're on the boundary, continue, or change mode to metadata once we've seen \n
+            // and reset counters
+            if *octet == b'\n' {
+                total_size += chunk_size;
+                chunk_size = 0;
+                read_of_this_chunk = 0;
+                mode = "metadata"
+            }
+            continue;
+        }
+    }
+    (finished, total_size)
 }
 
 fn check_valid_content_length_or_transfer_encoding(headers: &mut Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
@@ -188,6 +250,27 @@ impl<'a> Body<'a> {
     pub fn empty() -> Body<'a> {
         BodyString("")
     }
+
+    pub fn is_body_string(&self) -> bool {
+        match self {
+            BodyString(_) => true,
+            BodyStream(_) => false
+        }
+    }
+
+    pub fn is_body_stream(&self) -> bool {
+        match self {
+            BodyString(_) => false,
+            BodyStream(_) => true
+        }
+    }
+
+    pub fn length(&self) -> usize {
+        match self {
+            BodyString(str) => str.len(),
+            BodyStream(_) => panic!("Do not know the length of a body stream!")
+        }
+    }
 }
 
 pub fn body_length(body: &Body) -> u32 {
@@ -268,7 +351,9 @@ pub fn body_string(mut body: Body) -> String {
         BodyStream(ref mut reader) => {
             let big = &mut Vec::new();
             let _read_bytes = reader.read_to_end(big).unwrap();
-            str::from_utf8(&big).unwrap().trim_end_matches(char::from(0)).to_string()
+            str::from_utf8(&big).unwrap()
+                .trim_end_matches(char::from(0))
+                .to_string()
         }
     }
 }

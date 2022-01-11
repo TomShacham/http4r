@@ -7,11 +7,10 @@ mod common;
 mod tests {
     use std::collections::HashMap;
     use std::io::{Read, repeat};
-    use http4r_core::client::{Client, WithContentLength};
+    use http4r_core::client::{Client};
     use http4r_core::headers::Headers;
     use http4r_core::http_message::{body_string, Request, Response};
     use http4r_core::http_message::Body::{BodyStream, BodyString};
-    use http4r_core::http_message::Method::{CONNECT, GET, HEAD, OPTIONS, TRACE};
     use http4r_core::logging_handler::{LoggingHttpHandler, RustLogger, WasmClock};
     use http4r_core::redirect_to_https_handler::RedirectToHttpsHandler;
     use http4r_core::server::Server;
@@ -100,54 +99,12 @@ mod tests {
         });
     }
 
-    #[test]
-    fn method_semantics_ignore_body_of_get_head_options_connect_trace() {
-        let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
-
-        let mut client = WithContentLength::new(
-            Client { base_uri: String::from("127.0.0.1"), port: server.port }
-        );
-
-        let methods = vec!(GET, HEAD, OPTIONS, CONNECT, TRACE);
-
-        for method in methods {
-            let should_ignore_body = Request::request(method, Uri::parse("/"), Headers::empty())
-                .with_body(BodyString("non empty body"));
-
-            client.handle(should_ignore_body, |response: Response| {
-                assert_eq!("OK", response.status.to_string());
-                assert_eq!("".to_string(), body_string(response.body));
-                assert_eq!("Content-Length: 0", response.headers.to_wire_string());
-            });
-        }
-    }
-
 }
 
 
 //todo() DO NOT EXPECT A CONTENT LENGTH FOR HEAD,OPTIONS,CONNECT,204,1XX ETC
-//todo() handle duplicate Content-lengths Content-Length: 42, 42
-//todo() handle both transfer encoding and content length as error
-// If a message is received with both a Transfer-Encoding and a
-//        Content-Length header field, the Transfer-Encoding overrides the
-//        Content-Length.  Such a message might indicate an attempt to
-//        perform request smuggling (Section 9.5) or response splitting
-//        (Section 9.4) and ought to be handled as an error.  A sender MUST
-//        remove the received Content-Length field prior to forwarding such
-//        a message downstream.
-//todo() If a message is received without Transfer-Encoding and with
-//        either multiple Content-Length header fields having differing
-//        field-values or a single Content-Length header field having an
-//        invalid value, then the message framing is invalid and the
-//        recipient MUST treat it as an unrecoverable error.  If this is a
-//        request message, the server MUST respond with a 400 (Bad Request)
-//        status code and then close the connection.
-//todo() When a server listening only for HTTP request messages, or processing
-//    what appears from the start-line to be an HTTP request message,
-//    receives a sequence of octets that does not match the HTTP-message
-//    grammar aside from the robustness exceptions listed above, the server
-//    SHOULD respond with a 400 (Bad Request) response.
+
+
 //todo() handle set-cookie especially as multiple headers of this value cannot be combined
 // with commas
 //todo() allow header for 405 method not allowed

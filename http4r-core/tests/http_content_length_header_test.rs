@@ -97,4 +97,13 @@ If a message is received that has multiple Content-Length header
       significantly from the same field's use in MIME, where it is an
       optional field used only within the "message/external-body"
       media-type.
+
+   If a message is received without Transfer-Encoding and with
+      either multiple Content-Length header fields having differing
+      field-values or a single Content-Length header field having an
+      invalid value, then the message framing is invalid and the
+      recipient MUST treat it as an unrecoverable error.  If this is a
+      request message, the server MUST respond with a 400 (Bad Request)
+      status code and then close the connection.
+
  */

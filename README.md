@@ -32,6 +32,8 @@
   - test the body fitting in the first read stuff - expose underlying stream read/write in order to test?
   - support chunked encoding
   - support trailers
+  - configurable body length limits
+  - go through rfc and write test for each bit with comment above each one
   - multipart form data
   - todos in http_test eg set-cookie header special case
   - should query be separate or part of Uri

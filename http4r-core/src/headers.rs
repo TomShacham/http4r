@@ -23,7 +23,7 @@ impl Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
         for existing in &self.vec {
-            if existing.0 == header.0 {
+            if existing.0.to_lowercase() == header.0.to_lowercase() {
                 let string = existing.clone().1.to_string() + ", " + header.1;
                 new.push((existing.clone().0, string.clone()));
                 exists = true
@@ -41,7 +41,7 @@ impl Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
         for existing in &self.vec {
-            if existing.0 == replacing.0 {
+            if existing.0.to_lowercase() == replacing.0.to_lowercase() {
                 new.push((existing.clone().0, replacing.1.to_string()));
                 exists = true
             } else {
@@ -50,6 +50,17 @@ impl Headers {
         }
         if !exists {
             new.push((replacing.0.to_string(), replacing.1.to_string()));
+        }
+        Headers { vec: new }
+    }
+
+    pub fn remove(&self, name: &str) -> Headers {
+        let mut new: HeadersType = vec!();
+        for existing in &self.vec {
+            if existing.0.to_lowercase() == name.to_lowercase() {
+            } else {
+                new.push((existing.0.to_string(), existing.1.to_string()))
+            }
         }
         Headers { vec: new }
     }

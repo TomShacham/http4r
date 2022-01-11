@@ -12,8 +12,8 @@ mod tests {
 
     #[test]
     fn is_case_insensitive_and_preserves_case() {
-        assert_eq!(Headers::from(vec!(("fOo", "bAr"))).get("Foo"),
-                   Some("bAr".to_string()));
+        assert_eq!(Headers::from(vec!(("fOo", "bAr"), ("foo", "BaZ"))).get("Foo"),
+                   Some("bAr, BaZ".to_string()));
     }
 
     #[test]
@@ -28,8 +28,10 @@ mod tests {
         let added_again = added.add(("foo", "baz"));
         assert_eq!(added_again.vec, vec!(("foo".to_string(), "bar, baz".to_string())));
 
-        assert_eq!(added_again.add(("foo", "quux")).vec,
-                   vec!(("foo".to_string(), "bar, baz, quux".to_string())));
+        // case is different
+        let case_insensitive = added_again.add(("Foo", "quux"));
+        assert_eq!(case_insensitive.vec, vec!(("foo".to_string(), "bar, baz, quux".to_string())));
+
     }
 
     #[test]
@@ -44,7 +46,24 @@ mod tests {
 
         let add_when_using_replace = replaced.replace(("new", "value"));
         let with_new_value = vec!(("a".to_string(), "b".to_string()), ("new".to_string(), "value".to_string()));
-        assert_eq!(add_when_using_replace.vec, with_new_value)
+        assert_eq!(add_when_using_replace.vec, with_new_value);
+
+        let case_insensitive = add_when_using_replace.replace(("NEW", "VALUE"));
+        let with_newer_value = vec!(("a".to_string(), "b".to_string()),
+                                    ("new".to_string(), "VALUE".to_string()));
+        assert_eq!(case_insensitive.vec, with_newer_value);
+    }
+
+    #[test]
+    fn remove_headers() {
+        let headers = Headers::from(vec!(("a", "b")));
+        assert_eq!(headers.remove("a").vec, vec!());
+
+        let multi = Headers::from(vec!(("a", "b"), ("b", "c"), ("b", "d")));
+        assert_eq!(headers.remove("b").vec, vec!(("a".to_string(), "b".to_string())));
+
+        let case_insensitive = multi.remove("A");
+        assert_eq!(case_insensitive.vec, vec!(("b".to_string(), "c, d".to_string())))
     }
 
     #[test]
@@ -60,6 +79,12 @@ mod tests {
 
         assert_eq!(replace_again.vec, vec!(("a".to_string(), "c".to_string()), ("b".to_string(), "c".to_string())));
         assert_eq!(replaced.vec, vec!(("a".to_string(), "c".to_string())));
+
+        let removed = headers.remove("b");
+        let removed_again = removed.remove("a");
+
+        assert_eq!(removed_again.vec, vec!());
+        assert_eq!(removed.vec, vec!(("a".to_string(), "b".to_string())));
     }
 
     #[test]
