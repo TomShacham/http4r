@@ -55,11 +55,11 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
     if let Some(_encoding) = transfer_encoding {
         const BUFFER_SIZE: usize = 16384;
         let body_so_far = &buffer[end_of_headers_index..first_read];
-        let (mut finished, mut in_mode, mut total_read_so_far, mut read_of_current_chunk, mut chunk_size) = read_chunks(body_so_far, buffer2, "metadata", 0, 0, BUFFER_SIZE);
+        let (mut finished, mut in_mode, mut total_read_so_far, mut read_of_current_chunk, mut chunk_size) = read_chunks(body_so_far, buffer2, "metadata", 0, 0,0, BUFFER_SIZE);
         while !finished {
             let mut buffer = [0 as u8; BUFFER_SIZE];
             let next = stream.read(&mut buffer);
-            let (is_finished, current_mode, bytes_read, up_to_in_chunk,  current_chunk_size) = read_chunks(&buffer, buffer2, in_mode.as_str(), read_of_current_chunk, chunk_size, BUFFER_SIZE);
+            let (is_finished, current_mode, bytes_read, up_to_in_chunk,  current_chunk_size) = read_chunks(&buffer, buffer2, in_mode.as_str(), read_of_current_chunk, total_read_so_far,chunk_size, BUFFER_SIZE);
             in_mode = current_mode;
             total_read_so_far += bytes_read;
             read_of_current_chunk = up_to_in_chunk;
@@ -120,7 +120,7 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
     }
 }
 
-fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to: usize, this_chunk_size: usize, buffer_size: usize) -> (bool, String, usize, usize, usize) {
+fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, buffer_size: usize) -> (bool, String, usize, usize, usize) {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -155,7 +155,7 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
             total_bytes_read += bytes_read_from_current_chunk;
             break;
         } else if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_read) {
-            writer[last_complete_chunk_index + bytes_read_from_current_chunk] = *octet;
+            writer[total_read_so_far + bytes_read_from_current_chunk] = *octet;
             bytes_read_from_current_chunk += 1;
         } else if mode == "read" && on_boundary {
             // if we're on the boundary, continue, or change mode to metadata once we've seen \n
