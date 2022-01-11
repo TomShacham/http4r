@@ -29,24 +29,40 @@ mod tests {
 
         let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
 
-        // multiple content-lengths of different value
-        let chunked_request = Request::post(
+        // let little_string = "hello my baby, hello my honey, hello my ragtime gal";
+        //
+        // let big_chunked_request = Request::post(
+        //     Uri::parse("/bob"),
+        //     Headers::from(vec!(("Transfer-Encoding", "chunked"))),
+        //     BodyString(little_string));
+        //
+        // client.handle(big_chunked_request, |response: Response| {
+        //     assert_eq!(OK, response.status);
+        //     assert_eq!(little_string, body_string(response.body));
+        //     // Transfer-Encoding header should NOT be here now
+        //     assert_eq!(vec!(("Content-Length".to_string(), "51".to_string())), response.headers.vec);
+        // });
+
+        let long_string = "hello my baby, hello my honey, hello my ragtime gal".repeat(1000);
+
+        let big_chunked_request = Request::post(
             Uri::parse("/bob"),
             Headers::from(vec!(("Transfer-Encoding", "chunked"))),
-            BodyString("hello my baby, hello my honey, hello my ragtime gal"));
+            BodyString(long_string.as_str()));
 
-        client.handle(chunked_request, |response: Response| {
+        client.handle(big_chunked_request, |response: Response| {
             assert_eq!(OK, response.status);
-            assert_eq!("hello my baby, hello my honey, hello my ragtime gal", body_string(response.body));
+            assert_eq!(long_string, body_string(response.body));
             // Transfer-Encoding header should NOT be here now
-            assert_eq!(vec!(("Content-Length".to_string(), "51".to_string())), response.headers.vec);
+            assert_eq!(vec!(("Content-Length".to_string(), "51000".to_string())), response.headers.vec);
         });
     }
+
+    //test getting n chunks and having to carry on parsing half way through a chunk etc
 
     //test that we remove transfer encoding unless trailer set to accept it ?
 
     //test if client sets both content length and transfer encoding then delete transfer encoding?
 
-    //test getting n chunks and having to carry on parsing half way through a chunk etc
 
 }
