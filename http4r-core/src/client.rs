@@ -36,16 +36,17 @@ impl Handler for Client {
                 let mut vec: Vec<u8> = Vec::new();
                 // todo() do read while loop and write as you go a long
                 read.read_to_end(&mut vec).unwrap();
+                let end = vec!(b'0', b'\r', b'\n', b'\r', b'\n');
 
                 if vec.len() == 0 {
-                    let temp = vec!(b'0', b'\r', b'\n', b'\r', b'\n');
-                    let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
+                    let _copy = copy(&mut end.as_slice(), &mut stream).unwrap();
                 } else {
                     let mut temp = vec!();
                     temp.push(vec.len() as u8);
                     temp.push(b'\r');temp.push(b'\n');
                     temp.append(&mut vec);
                     temp.push(b'\r');temp.push(b'\n');
+                    end.iter().for_each(|b| temp.push(*b));
                     let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
                     _total_length += vec.len();
                 }
@@ -71,7 +72,7 @@ impl Handler for Client {
         //todo() read and write timeouts
 
         let mut buffer = [0; 16384];
-        let mut buffer2 = [0; 16384];
+        let mut buffer2 = [0; 1048576];
         let first_read = stream.try_clone().unwrap().read(&mut buffer).unwrap();
 
         let result = message_from(&buffer, stream.try_clone().unwrap(), first_read, &mut buffer2);

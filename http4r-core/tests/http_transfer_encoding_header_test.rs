@@ -43,7 +43,7 @@ mod tests {
         //     assert_eq!(vec!(("Content-Length".to_string(), "51".to_string())), response.headers.vec);
         // });
 
-        let long_string = "hello my baby, hello my honey, hello my ragtime gal".repeat(1000);
+        let long_string = "h".repeat(16385);
 
         let big_chunked_request = Request::post(
             Uri::parse("/bob"),
@@ -54,7 +54,7 @@ mod tests {
             assert_eq!(OK, response.status);
             assert_eq!(long_string, body_string(response.body));
             // Transfer-Encoding header should NOT be here now
-            assert_eq!(vec!(("Content-Length".to_string(), "51000".to_string())), response.headers.vec);
+            assert_eq!(vec!(("Content-Length".to_string(), "16385".to_string())), response.headers.vec);
         });
     }
 

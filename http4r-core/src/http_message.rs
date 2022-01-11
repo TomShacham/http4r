@@ -55,20 +55,20 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
     if let Some(_encoding) = transfer_encoding {
         const BUFFER_SIZE: usize = 16384;
         let body_so_far = &buffer[end_of_headers_index..first_read];
-        let (mut finished, mut in_mode, mut read_so_far, mut read_of_current_chunk, mut chunk_size) = read_chunks(body_so_far, buffer2, "metadata", 0, 0, BUFFER_SIZE);
+        let (mut finished, mut in_mode, mut total_read_so_far, mut read_of_current_chunk, mut chunk_size) = read_chunks(body_so_far, buffer2, "metadata", 0, 0, BUFFER_SIZE);
         while !finished {
             let mut buffer = [0 as u8; BUFFER_SIZE];
             let next = stream.read(&mut buffer);
             let (is_finished, current_mode, bytes_read, up_to_in_chunk,  current_chunk_size) = read_chunks(&buffer, buffer2, in_mode.as_str(), read_of_current_chunk, chunk_size, BUFFER_SIZE);
             in_mode = current_mode;
-            read_so_far += bytes_read;
+            total_read_so_far += bytes_read;
             read_of_current_chunk = up_to_in_chunk;
             chunk_size = current_chunk_size;
             finished = is_finished;
         }
-        headers = headers.add(("Content-Length", read_so_far.to_string().as_str()))
+        headers = headers.add(("Content-Length", total_read_so_far.to_string().as_str()))
             .remove("Transfer-Encoding");
-        body = BodyStream(Box::new(buffer2.take(read_so_far as u64)));
+        body = BodyStream(Box::new(buffer2.take(total_read_so_far as u64)));
     } else {
         match content_length {
             Some(_) if is_req_and_method_cannot_have_body => {
@@ -121,14 +121,18 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
 }
 
 fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to: usize, this_chunk_size: usize, buffer_size: usize) -> (bool, String, usize, usize, usize) {
+    let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
-    let mut bytes_of_this_chunk_previously_read = read_up_to;
+    let mut bytes_of_this_chunk_read = read_up_to;
     let mut last_complete_chunk_index: usize = 0;
     let mut finished = false;
     let mut bytes_read_from_current_chunk: usize = 0;
     let mut total_bytes_read: usize = 0;
     for (index, octet) in reader.iter().enumerate() {
+        prev.remove(0);
+        prev.push(*octet as char);
+
         let on_boundary = *octet == b'\n' || *octet == b'\r';
         if mode == "metadata" && !on_boundary {
             // if we have a digit, multiply last digit by 10 and add this one
@@ -146,10 +150,11 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
             }
             continue;
         }
-        if mode == "read" && (total_bytes_read == buffer_size || index) {
-            bytes_of_this_chunk_previously_read += bytes_read_from_current_chunk;
+        if mode == "read" && index == reader.len() - 1 {
+            bytes_of_this_chunk_read += bytes_read_from_current_chunk;
+            total_bytes_read += bytes_read_from_current_chunk;
             break;
-        } else if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_previously_read) {
+        } else if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_read) {
             writer[last_complete_chunk_index + bytes_read_from_current_chunk] = *octet;
             bytes_read_from_current_chunk += 1;
         } else if mode == "read" && on_boundary {
@@ -158,7 +163,7 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
             if *octet == b'\n' {
                 last_complete_chunk_index += chunk_size;
                 total_bytes_read += bytes_read_from_current_chunk;
-                bytes_of_this_chunk_previously_read = 0;
+                bytes_of_this_chunk_read = 0;
                 chunk_size = 0;
                 bytes_read_from_current_chunk = 0;
                 mode = "metadata";
@@ -167,7 +172,7 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
         }
     }
 
-    (finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_previously_read, chunk_size)
+    (finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size)
 }
 
 fn check_valid_content_length_or_transfer_encoding(headers: &mut Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
