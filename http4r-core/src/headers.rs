@@ -74,6 +74,20 @@ impl Headers {
         None
     }
 
+    pub fn filter(&self, names: Vec<&str>) -> Headers {
+        let mut vec = vec!();
+        for name in names {
+            if let Some(value) = self.get(name) {
+                vec.push((name.to_string(), value) as HeaderType);
+            }
+        }
+        Headers { vec }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.vec.is_empty()
+    }
+
     pub fn has(&self, header_name: &str) -> bool {
         return self.get(header_name).is_some();
     }

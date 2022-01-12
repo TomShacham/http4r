@@ -19,6 +19,6 @@ pub struct PassThroughHandler {}
 
 impl Handler for PassThroughHandler {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
-        fun(Response::ok(req.headers, req.body))
+        fun(Response::ok(req.headers, req.body).with_trailers(req.trailers));
     }
 }

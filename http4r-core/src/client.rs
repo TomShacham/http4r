@@ -69,6 +69,11 @@ impl Handler for Client {
             }
         }
 
+        let has_trailers = !req.trailers.to_wire_string().is_empty();
+        if has_trailers {
+            stream.write(format!("{}\r\n\r\n", req.trailers.to_wire_string()).as_bytes());
+        }
+
         //todo() read and write timeouts
 
         let mut buffer = [0; 16384];

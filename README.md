@@ -29,9 +29,12 @@
     - read and write to database
 ---
 - core api
-  - test the body fitting in the first read stuff - expose underlying stream read/write in order to test?
-  - support chunked encoding
-  - support trailers
+  - chunked encoding... dont create big ass buffer unless required
+    - if at the end of the buffer but we need to read again to get trailers 
+    - test works when using a BodyStream of chunks
+    - support streaming onto next server in chunks 
+    - support trailers
+    - and: client send chunks from a stream (not read_to_end)
   - configurable body length limits
   - go through rfc and write test for each bit with comment above each one
   - multipart form data

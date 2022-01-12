@@ -88,6 +88,30 @@ mod tests {
     }
 
     #[test]
+    fn filter(){
+        let vec = vec!(("a", "b"));
+        assert_eq!(Headers::from(vec).filter(vec!()).vec, vec!());
+
+        let vec2 = vec!(("a", "b"), ("b", "c"));
+        assert_eq!(Headers::from(vec2).filter(vec!("a")).vec,
+                   vec!(("a".to_string(), "b".to_string())));
+
+        let vec3 = vec!(("a", "b"), ("b", "c"), ("c", "d"));
+        assert_eq!(Headers::from(vec3).filter(vec!("a", "c")).vec,
+                   vec!(
+                       ("a".to_string(), "b".to_string()),
+                       ("c".to_string(), "d".to_string()),
+                   ));
+    }
+    
+    #[test]
+    fn is_empty() {
+        assert!(Headers::from(vec!()).is_empty());
+
+        assert_eq!(Headers::from(vec!(("a", "b"))).is_empty(), false);
+    }
+
+    #[test]
     fn from_does_munging(){
         let vec1 = vec!(("a", "b"), ("a", "c"));
 

@@ -51,19 +51,36 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
     if headers.has("Content-Length") && transfer_encoding.is_some() {
         headers = headers.remove("Content-Length");
     }
+    let mut trailers = Headers::empty();
 
     if let Some(_encoding) = transfer_encoding {
         const BUFFER_SIZE: usize = 16384;
+        let expected_trailers =  headers.get("Trailers");
         let body_so_far = &buffer[end_of_headers_index..first_read];
-        let (mut finished, mut in_mode, mut total_read_so_far, mut read_of_current_chunk, mut chunk_size) = read_chunks(body_so_far, buffer2, "metadata", 0, 0,0, BUFFER_SIZE);
+        let (mut finished,
+            mut in_mode,
+            mut total_read_so_far,
+            mut read_of_current_chunk,
+            mut chunk_size,
+            mut trailers_first_time
+        ) = read_chunks(body_so_far, buffer2, "metadata", 0, 0,0, &expected_trailers);
+
         while !finished {
             let mut buffer = [0 as u8; BUFFER_SIZE];
             let next = stream.read(&mut buffer);
-            let (is_finished, current_mode, bytes_read, up_to_in_chunk,  current_chunk_size) = read_chunks(&buffer, buffer2, in_mode.as_str(), read_of_current_chunk, total_read_so_far,chunk_size, BUFFER_SIZE);
+            let (is_finished,
+                current_mode,
+                bytes_read,
+                up_to_in_chunk,
+                current_chunk_size,
+                new_trailers
+            ) = read_chunks(&buffer, buffer2, in_mode.as_str(), read_of_current_chunk, total_read_so_far,chunk_size, &expected_trailers);
+
             in_mode = current_mode;
             total_read_so_far += bytes_read;
             read_of_current_chunk = up_to_in_chunk;
             chunk_size = current_chunk_size;
+            trailers = new_trailers;
             finished = is_finished;
         }
         headers = headers.add(("Content-Length", total_read_so_far.to_string().as_str()))
@@ -107,6 +124,7 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
             headers,
             body,
             version: HttpVersion { major, minor },
+            trailers: Headers::empty()
         }))
     } else {
         let (major, minor) = http_version_from(part3);
@@ -116,11 +134,12 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
             headers,
             body,
             version: HttpVersion { major, minor },
+            trailers: Headers::empty()
         }))
     }
 }
 
-fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, buffer_size: usize) -> (bool, String, usize, usize, usize) {
+fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, mut expected_trailers: &Option<String>) -> (bool, String, usize, usize, usize, Headers) {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -129,6 +148,9 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
     let mut finished = false;
     let mut bytes_read_from_current_chunk: usize = 0;
     let mut total_bytes_read: usize = 0;
+    let mut start_of_trailers: usize = 0;
+    let mut trailers = Headers::empty();
+
     for (index, octet) in reader.iter().enumerate() {
         prev.remove(0);
         prev.push(*octet as char);
@@ -139,9 +161,11 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
             // if first digit we encounter is 0 then we'll multiply 0 by 10 and get 0
             // ...
             chunk_size = (chunk_size * 10) + (*octet as char).to_digit(10).unwrap() as usize;
-            if chunk_size == 0 {
+            if chunk_size == 0 { // we have encountered the 0 chunk
+                //todo() if at the end of the buffer but we need to read again to get trailers
                 finished = true;
-                break; // we have encountered the 0 chunk
+                start_of_trailers = index + 4; // add 4 cos we didn't read the \r\n\r\n after the 0
+                break;
             }
         } else if mode == "metadata" && on_boundary {
             // if we're on the boundary, continue, or change mode to read once we've seen \n
@@ -174,7 +198,14 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
         }
     }
 
-    (finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size)
+    if finished && expected_trailers.is_some() {
+        let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
+        if let  Ok((_, _, headers) ) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice()) {
+            trailers = headers.filter(expected_trailers.clone().unwrap().split(", ").collect())
+        }
+    }
+
+    (finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size, trailers)
 }
 
 fn check_valid_content_length_or_transfer_encoding(headers: &mut Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
@@ -339,6 +370,7 @@ pub struct Request<'a> {
     pub uri: Uri<'a>,
     pub method: Method,
     pub version: HttpVersion,
+    pub trailers: Headers,
 }
 
 pub struct Response<'a> {
@@ -346,6 +378,7 @@ pub struct Response<'a> {
     pub body: Body<'a>,
     pub status: Status,
     pub version: HttpVersion,
+    pub trailers: Headers,
 }
 
 impl<'a> Request<'a> {
@@ -359,6 +392,13 @@ impl<'a> Request<'a> {
     pub fn with_header(self, pair: (&str, &str)) -> Request<'a> {
         Request {
             headers: self.headers.add(pair),
+            ..self
+        }
+    }
+
+    pub fn with_trailers(self, trailers: Headers) -> Request<'a> {
+        Request {
+            trailers,
             ..self
         }
     }
@@ -422,42 +462,50 @@ impl Method {
 
 impl<'a> Response<'a> {
     pub fn ok(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: OK, version: HttpVersion { major: 1, minor: 1 } }
+        Response { headers, body, status: OK, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
     pub fn bad_request(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: BadRequest, version: HttpVersion { major: 1, minor: 1 } }
+        Response { headers, body, status: BadRequest, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
     pub fn internal_server_error(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: InternalServerError, version: HttpVersion { major: 1, minor: 1 } }
+        Response { headers, body, status: InternalServerError, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
     pub fn length_required(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: LengthRequired, version: HttpVersion { major: 1, minor: 1 } }
+        Response { headers, body, status: LengthRequired, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
     pub fn not_found(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: NotFound, version: HttpVersion { major: 1, minor: 1 } }
+        Response { headers, body, status: NotFound, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
     pub fn moved_permanently(headers: Headers, body: Body) -> Response {
-        Response { headers, body, status: MovedPermanently, version: HttpVersion { major: 1, minor: 1 } }
+        Response { headers, body, status: MovedPermanently, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
+    }
+
+    pub fn with_trailers(self, trailers: Headers) -> Response<'a> {
+        Response {
+            trailers,
+            ..self
+        }
     }
 }
 
 impl<'a> Request<'a> {
     pub fn request(method: Method, uri: Uri, headers: Headers) -> Request {
-        Request { method, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 } }
+        Request { method, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
     pub fn get(uri: Uri, headers: Headers) -> Request {
-        Request { method: GET, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 } }
+        Request { method: GET, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
     pub fn post(uri: Uri<'a>, headers: Headers, body: Body<'a>) -> Request<'a> {
-        Request { method: POST, headers, body, uri, version: HttpVersion { major: 1, minor: 1 } }
+        Request { method: POST, headers, body, uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
+
 }
 
 
