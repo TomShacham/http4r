@@ -150,13 +150,15 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
             }
             continue;
         }
-        if mode == "read" && index == reader.len() - 1 {
-            bytes_of_this_chunk_read += bytes_read_from_current_chunk;
-            total_bytes_read += bytes_read_from_current_chunk;
-            break;
-        } else if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_read) {
+        if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_read) {
             writer[total_read_so_far + bytes_read_from_current_chunk] = *octet;
             bytes_read_from_current_chunk += 1;
+            // if last index, add on the bytes read from current chunk
+            if index == reader.len() - 1 {
+                bytes_of_this_chunk_read += bytes_read_from_current_chunk;
+                total_bytes_read += bytes_read_from_current_chunk;
+                break;
+            }
         } else if mode == "read" && on_boundary {
             // if we're on the boundary, continue, or change mode to metadata once we've seen \n
             // and reset counters
