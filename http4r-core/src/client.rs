@@ -69,7 +69,7 @@ impl Handler for Client {
             }
         }
 
-        let has_trailers = !req.trailers.to_wire_string().is_empty();
+        let has_trailers = !req.trailers.is_empty();
         if has_trailers {
             stream.write(format!("{}\r\n\r\n", req.trailers.to_wire_string()).as_bytes());
         }

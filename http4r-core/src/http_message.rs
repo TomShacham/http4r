@@ -65,6 +65,8 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
             mut trailers_first_time
         ) = read_chunks(body_so_far, buffer2, "metadata", 0, 0,0, &expected_trailers);
 
+        trailers = trailers_first_time;
+
         while !finished {
             let mut buffer = [0 as u8; BUFFER_SIZE];
             let next = stream.read(&mut buffer);
@@ -124,7 +126,7 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
             headers,
             body,
             version: HttpVersion { major, minor },
-            trailers: Headers::empty()
+            trailers
         }))
     } else {
         let (major, minor) = http_version_from(part3);
@@ -134,7 +136,7 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
             headers,
             body,
             version: HttpVersion { major, minor },
-            trailers: Headers::empty()
+            trailers
         }))
     }
 }
@@ -164,7 +166,7 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
             if chunk_size == 0 { // we have encountered the 0 chunk
                 //todo() if at the end of the buffer but we need to read again to get trailers
                 finished = true;
-                start_of_trailers = index + 4; // add 4 cos we didn't read the \r\n\r\n after the 0
+                start_of_trailers = index + 5; // add 5 cos we didn't read the \r\n\r\n after the 0
                 break;
             }
         } else if mode == "metadata" && on_boundary {
@@ -201,6 +203,7 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
     if finished && expected_trailers.is_some() {
         let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
         if let  Ok((_, _, headers) ) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice()) {
+            println!("foo {}", headers.to_wire_string());
             trailers = headers.filter(expected_trailers.clone().unwrap().split(", ").collect())
         }
     }
@@ -227,12 +230,14 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
     let mut first_line = None;
     let mut headers = None;
     for char in buffer {
-        if first_line.is_none() && prev[2] as char == '\r' && prev[3] as char == '\n' {
+        end_of_headers_index += 1;
+
+        if first_line.is_none() && prev[3] == '\r' && *char == b'\n' {
             first_line = Some(&buffer[..end_of_headers_index]);
             end_of_start_line = end_of_headers_index;
         }
-        if !first_line.is_none() && prev.iter().collect::<String>() == "\r\n\r\n" {
-            let end_of_headers = end_of_headers_index - prev.len();
+        if !first_line.is_none() && prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *char == b'\n' {
+            let end_of_headers = end_of_headers_index - 4; // end is behind the \r\n\r\n chars (ie back 4)
             if end_of_start_line > end_of_headers {
                 headers = None
             } else {
@@ -245,7 +250,6 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
         if end_of_headers_index > buffer.len() {
             return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
         }
-        end_of_headers_index += 1;
     }
     let header_string = if headers.is_none() { "" } else {
         str::from_utf8(&headers.unwrap()).unwrap()

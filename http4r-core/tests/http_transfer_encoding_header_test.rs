@@ -127,11 +127,11 @@ mod tests {
                 ("Trailers".to_string(), "Expires".to_string()),
                 ("Content-Length".to_string(), "5".to_string()),
             ), response.headers.vec);
-            assert_eq!(vec!(
-                ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
-            ), response.trailers.vec);
+            assert_eq!("".to_string(), response.trailers.to_wire_string());
         });
     }
 
     //test that we remove transfer encoding unless trailer set to accept it ?
+
+    //test that if client accepts trailers TE then it keeps em ???
 }

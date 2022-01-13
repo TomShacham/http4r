@@ -91,11 +91,17 @@ impl Server where {
         match response.body {
             BodyString(body_string) => {
                 returning.push_str(&body_string);
+                if !response.trailers.is_empty() {
+                    returning.push_str(format!("\r\n{}\r\n\r\n", response.trailers.to_wire_string()).as_str());
+                }
                 stream.write(returning.as_bytes()).unwrap();
             }
             BodyStream(ref mut body_stream) => {
                 let _status_line_and_headers = stream.write(returning.as_bytes()).unwrap();
                 let _copy = copy(body_stream, &mut stream).unwrap();
+                if !response.trailers.is_empty() {
+                    returning.push_str(format!("\r\n{}\r\n\r\n", response.trailers.to_wire_string()).as_str());
+                }
             }
         }
     }
