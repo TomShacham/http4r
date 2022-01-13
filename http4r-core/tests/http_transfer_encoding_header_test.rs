@@ -113,7 +113,7 @@ mod tests {
             Uri::parse("/bob"),
             Headers::from(vec!(
                 ("Transfer-Encoding", "chunked"),
-                ("Trailers", "Expires, Integrity"),
+                ("Trailer", "Expires, Integrity"),
             )),
             BodyString(little_string),
         ).with_trailers(Headers::from(vec!(
@@ -128,7 +128,7 @@ mod tests {
             assert_eq!(vec!(
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
                 ("Integrity".to_string(), "Some hash".to_string()),
-                ("Trailers".to_string(), "Expires, Integrity".to_string()),
+                ("Trailer".to_string(), "Expires, Integrity".to_string()),
                 ("Content-Length".to_string(), "5".to_string()),
             ), response.headers.vec);
         });
@@ -182,7 +182,7 @@ Content-Encoding, Content-Type, Content-Range
             Uri::parse("/bob"),
             Headers::from(vec!(
                 ("Transfer-Encoding", "chunked"),
-                ("Trailers", "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range")
+                ("Trailer", "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range")
             )),
             BodyString(little_string),
         ).with_trailers(Headers::from(vec!(
@@ -192,7 +192,7 @@ Content-Encoding, Content-Type, Content-Range
             ("Cache-Control", "private"),
             ("Max-Forwards", "50"),
             ("TE", "trailers"),
-            ("Trailers", "Content-Length"),
+            ("Trailer", "Content-Length"),
             ("Authorization", "foo@bar"),
             ("Set-Cookie", "tom=foo; matt=bar"),
             ("Content-Encoding", "gzip"),
@@ -207,7 +207,7 @@ Content-Encoding, Content-Type, Content-Range
             // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
-                ("Trailers".to_string(), "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range".to_string()),
+                ("Trailer".to_string(), "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range".to_string()),
                 ("Content-Length".to_string(), "5".to_string()),
             ), response.headers.vec);
         });
@@ -215,11 +215,7 @@ Content-Encoding, Content-Type, Content-Range
 
     //test trailers cant be really long
 
-    //test that you dont have to specify Trailers header
-
-    //test that we ignore privileged headers in trailers eg host, cache-control
-
     //test that we remove transfer encoding unless trailer set to accept it ?
 
-    //test that if client accepts trailers TE then it keeps em ???
+    //test that if client accepts trailers TE then it keeps em and we keep message chunked ???
 }

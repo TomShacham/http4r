@@ -5,18 +5,32 @@ pub struct Headers {
 pub type HeaderType = (String, String);
 pub type HeadersType = Vec<HeaderType>;
 
-pub static DISALLOWED_TRAILERS: [&'static str; 11] = [
+pub static DISALLOWED_TRAILERS: [&'static str; 21] = [
+    //authorization
+    "authorization",
+    "www-authenticate",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "set-cookie",
+    //transfer
     "transfer-encoding",
     "content-length",
-    "cache-control",
-    "max-forwards",
-    "te",
-    "trailers",
-    "authorization",
-    "set-cookie",
+    "trailer",
+    "location",
+    "vary",
+    "retry-after",
     "content-encoding",
     "content-type",
-    "content-range"
+    "content-range",
+    //controls
+    "cache-control",
+    "expect",
+    "max-forwards",
+    "pragma",
+    "range",
+    "te",
+    //routing
+    "host",
 ];
 
 

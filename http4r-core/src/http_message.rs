@@ -54,7 +54,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     let mut trailers = Headers::empty();
 
     if let Some(_encoding) = transfer_encoding {
-        let expected_trailers = headers.get("Trailers");
+        let expected_trailers = headers.get("Trailer");
         let cleansed_trailers = expected_trailers
             .map(|ts| ts.split(", ")
                 .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))

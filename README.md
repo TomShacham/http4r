@@ -38,7 +38,7 @@
   - configurable body length limits
   - go through rfc and write test for each bit with comment above each one
   - multipart form data
-  - todos in http_test eg set-cookie header special case
+  - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - should query be separate or part of Uri
   - default response headers, content-type, content-length, date
   - support http/1.0 - ie. read til socket close or EOF
