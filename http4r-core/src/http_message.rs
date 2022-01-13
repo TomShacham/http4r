@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::io::Read;
 use std::net::TcpStream;
 use std::str;
-use crate::headers::{Headers};
+use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
 use crate::http_message::Status::{BadRequest, InternalServerError, LengthRequired, MovedPermanently, NotFound, OK, Unknown};
@@ -54,7 +54,13 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     let mut trailers = Headers::empty();
 
     if let Some(_encoding) = transfer_encoding {
-        let expected_trailers =  headers.get("Trailers");
+        let expected_trailers = headers.get("Trailers");
+        let cleansed_trailers = expected_trailers
+            .map(|ts| ts.split(", ")
+                .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
+                .map(|t| t.to_string())
+                .collect::<Vec<String>>())
+            .unwrap_or(vec!());
         let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
         let (mut finished,
             mut in_mode,
@@ -62,7 +68,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
             mut read_of_current_chunk,
             mut chunk_size,
             mut trailers_first_time
-        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, 0, &expected_trailers);
+        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, 0, &cleansed_trailers);
 
         trailers = trailers_first_time;
 
@@ -75,7 +81,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
                 up_to_in_chunk,
                 current_chunk_size,
                 new_trailers
-            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, total_read_so_far, chunk_size, &expected_trailers);
+            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, total_read_so_far, chunk_size, &cleansed_trailers);
 
             in_mode = current_mode;
             total_read_so_far += bytes_read;
@@ -115,7 +121,6 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
             }
             _ => body = Body::empty()
         }
-
     }
 
     if is_response {
@@ -125,7 +130,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
             headers,
             body,
             version: HttpVersion { major, minor },
-            trailers
+            trailers,
         }))
     } else {
         let (major, minor) = http_version_from(part3);
@@ -135,12 +140,12 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
             headers,
             body,
             version: HttpVersion { major, minor },
-            trailers
+            trailers,
         }))
     }
 }
 
-fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, mut expected_trailers: &Option<String>) -> (bool, String, usize, usize, usize, Headers) {
+fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, mut expected_trailers: &Vec<String>) -> (bool, String, usize, usize, usize, Headers) {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -199,11 +204,11 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, mut last_mode: &str, read_up
         }
     }
 
-    if finished && expected_trailers.is_some() {
+    //todo() what if you need to do another read to get all the trailers? finished should be false until we finish reading trailers
+    if finished && !expected_trailers.is_empty() {
         let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
-        if let  Ok((_, _, headers) ) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice()) {
-            println!("foo {}", headers.to_wire_string());
-            trailers = headers.filter(expected_trailers.clone().unwrap().split(", ").collect())
+        if let Ok((_, _, headers)) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice()) {
+            trailers = headers.filter(expected_trailers.iter().map(|s| s as &str).collect())
         }
     }
 
@@ -516,7 +521,6 @@ impl<'a> Request<'a> {
     pub fn post(uri: Uri<'a>, headers: Headers, body: Body<'a>) -> Request<'a> {
         Request { method: POST, headers, body, uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
-
 }
 
 

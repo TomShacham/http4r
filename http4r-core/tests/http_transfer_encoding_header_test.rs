@@ -105,7 +105,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client { base_uri: "127.0.0.1".to_string(), port: server.port };
 
         let little_string = "hello";
 
@@ -133,6 +133,91 @@ mod tests {
             ), response.headers.vec);
         });
     }
+
+    /*
+https://datatracker.ietf.org/doc/html/rfc7230#section-4.1.2
+
+A sender MUST NOT generate a trailer that contains a field necessary
+   for message framing (e.g., Transfer-Encoding and Content-Length),
+   routing (e.g., Host), request modifiers (e.g., controls and
+   conditionals in Section 5 of [RFC7231]), authentication (e.g., see
+   [RFC7235] and [RFC6265]), response control data (e.g., see Section
+   7.1 of [RFC7231]), or determining how to process the payload (e.g.,
+   Content-Encoding, Content-Type, Content-Range, and Trailer).
+
+When a chunked message containing a non-empty trailer is received,
+   the recipient MAY process the fields (aside from those forbidden
+   above) as if they were appended to the message's header section.  A
+   recipient MUST ignore (or consider as an error) any fields that are
+   forbidden to be sent in a trailer, since processing them as if they
+   were present in the header section might bypass external security
+   filters.
+
+   Unless the request includes a TE header field indicating "trailers"
+   is acceptable, as described in Section 4.3, a server SHOULD NOT
+   generate trailer fields that it believes are necessary for the user
+   agent to receive.  Without a TE containing "trailers", the server
+   ought to assume that the trailer fields might be silently discarded
+   along the path to the user agent.  This requirement allows
+   intermediaries to forward a de-chunked message to an HTTP/1.0
+   recipient without buffering the entire response.
+
+Transfer-Encoding and Content-Length
+Host
+Cache-Control, Max-Forwards, or TE
+ Authorization or Set-Cookie
+Content-Encoding, Content-Type, Content-Range
+
+*/
+    #[test]
+    fn cannot_set_certain_trailers_as_headers() {
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassThroughHandler {}) });
+
+        let mut client = Client { base_uri: "127.0.0.1".to_string(), port: server.port };
+
+        let little_string = "hello";
+
+        let with_illegal_trailers = Request::post(
+            Uri::parse("/bob"),
+            Headers::from(vec!(
+                ("Transfer-Encoding", "chunked"),
+                ("Trailers", "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range")
+            )),
+            BodyString(little_string),
+        ).with_trailers(Headers::from(vec!(
+            ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT"),
+            ("Transfer-Encoding", "chunked"),
+            ("Content-Length", "10"),
+            ("Cache-Control", "private"),
+            ("Max-Forwards", "50"),
+            ("TE", "trailers"),
+            ("Trailers", "Content-Length"),
+            ("Authorization", "foo@bar"),
+            ("Set-Cookie", "tom=foo; matt=bar"),
+            ("Content-Encoding", "gzip"),
+            ("Content-Type", "text/html"),
+            ("Content-Range", "bytes 200-1000/67589"),
+            //todo() add full list of disallowed trailers       https://datatracker.ietf.org/doc/html/rfc7230#section-4.1.2
+        )));
+
+        client.handle(with_illegal_trailers, |response: Response| {
+            assert_eq!(OK, response.status);
+            assert_eq!(little_string, body_string(response.body));
+            // Transfer-Encoding header should NOT be here now
+            assert_eq!(vec!(
+                ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
+                ("Trailers".to_string(), "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range".to_string()),
+                ("Content-Length".to_string(), "5".to_string()),
+            ), response.headers.vec);
+        });
+    }
+
+    //test trailers cant be really long
+
+    //test that you dont have to specify Trailers header
+
+    //test that we ignore privileged headers in trailers eg host, cache-control
 
     //test that we remove transfer encoding unless trailer set to accept it ?
 

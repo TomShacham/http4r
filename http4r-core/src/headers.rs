@@ -1,10 +1,24 @@
-
 pub struct Headers {
     pub vec: HeadersType,
 }
 
 pub type HeaderType = (String, String);
 pub type HeadersType = Vec<HeaderType>;
+
+pub static DISALLOWED_TRAILERS: [&'static str; 11] = [
+    "transfer-encoding",
+    "content-length",
+    "cache-control",
+    "max-forwards",
+    "te",
+    "trailers",
+    "authorization",
+    "set-cookie",
+    "content-encoding",
+    "content-type",
+    "content-range"
+];
+
 
 impl Headers {
     pub fn empty() -> Headers {
@@ -68,8 +82,7 @@ impl Headers {
     pub fn remove(&self, name: &str) -> Headers {
         let mut new: HeadersType = vec!();
         for existing in &self.vec {
-            if existing.0.to_lowercase() == name.to_lowercase() {
-            } else {
+            if existing.0.to_lowercase() == name.to_lowercase() {} else {
                 new.push((existing.0.to_string(), existing.1.to_string()))
             }
         }
