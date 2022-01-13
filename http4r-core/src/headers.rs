@@ -39,8 +39,11 @@ impl Headers {
 
     pub fn add_all(&self, headers: Headers) -> Headers {
         let mut new = Headers::empty();
+        headers.vec.iter().for_each(|x| {
+            new = new.add((x.0.as_str(), x.1.as_str()))
+        });
         self.vec.iter().for_each(|x| {
-            new = headers.add((x.0.as_str(), x.1.as_str()))
+            new = new.add((x.0.as_str(), x.1.as_str()))
         });
         new
     }
