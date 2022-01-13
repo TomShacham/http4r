@@ -385,6 +385,7 @@ pub struct Response<'a> {
     pub trailers: Headers,
 }
 
+
 impl<'a> Request<'a> {
     pub fn with_body(self, body: Body<'a>) -> Request<'a> {
         Request {
@@ -492,6 +493,13 @@ impl<'a> Response<'a> {
     pub fn with_trailers(self, trailers: Headers) -> Response<'a> {
         Response {
             trailers,
+            ..self
+        }
+    }
+
+    pub fn with_headers(self, headers: Headers) -> Response<'a> {
+        Response {
+            headers: self.headers.add_all(headers),
             ..self
         }
     }

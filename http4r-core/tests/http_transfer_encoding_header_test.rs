@@ -113,21 +113,23 @@ mod tests {
             Uri::parse("/bob"),
             Headers::from(vec!(
                 ("Transfer-Encoding", "chunked"),
-                ("Trailers", "Expires"),
+                ("Trailers", "Expires, Integrity"),
             )),
             BodyString(little_string),
         ).with_trailers(Headers::from(vec!(
-            ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT"))));
+            ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT"),
+            ("Integrity", "Some hash"),
+        )));
 
         client.handle(with_trailer, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(little_string, body_string(response.body));
             // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(
-                ("Trailers".to_string(), "Expires".to_string()),
+                ("Trailers".to_string(), "Expires, Integrity".to_string()),
                 ("Content-Length".to_string(), "5".to_string()),
             ), response.headers.vec);
-            assert_eq!("".to_string(), response.trailers.to_wire_string());
+            assert_eq!("ahhh".to_string(), response.trailers.to_wire_string());
         });
     }
 

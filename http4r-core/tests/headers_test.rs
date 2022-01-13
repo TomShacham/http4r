@@ -31,6 +31,18 @@ mod tests {
         // case is different
         let case_insensitive = added_again.add(("Foo", "quux"));
         assert_eq!(case_insensitive.vec, vec!(("foo".to_string(), "bar, baz, quux".to_string())));
+    }
+
+    #[test]
+    fn add_many_headers() {
+        let headers = Headers::from(vec!(("a", "b")));
+        let adding = Headers::from(vec!(("some", "other"), ("and", "more")));
+        assert_eq!(headers.add_all(adding).vec,
+                   vec!(
+                        ("some".to_string(), "other".to_string()),
+                        ("and".to_string(), "more".to_string()),
+                        ("a".to_string(), "b".to_string()),
+                   ));
 
     }
 

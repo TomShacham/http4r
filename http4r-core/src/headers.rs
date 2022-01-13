@@ -37,6 +37,14 @@ impl Headers {
         Headers { vec: new }
     }
 
+    pub fn add_all(&self, headers: Headers) -> Headers {
+        let mut new = Headers::empty();
+        self.vec.iter().for_each(|x| {
+            new = headers.add((x.0.as_str(), x.1.as_str()))
+        });
+        new
+    }
+
     pub fn replace(&self, replacing: (&str, &str)) -> Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
