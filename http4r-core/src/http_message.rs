@@ -28,7 +28,7 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_bytes: usize, buffer2: &'a mut [u8]) -> Result<HttpMessage<'a>, MessageError> {
+pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_bytes: usize, chunks_vec: &'a mut Vec<u8>) -> Result<HttpMessage<'a>, MessageError> {
     let metadata_result = start_line_and_headers_from(first_read);
     if metadata_result.is_err() {
         return Err(metadata_result.err().unwrap());
@@ -54,7 +54,6 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     let mut trailers = Headers::empty();
 
     if let Some(_encoding) = transfer_encoding {
-        const BUFFER_SIZE: usize = 16384;
         let expected_trailers =  headers.get("Trailers");
         let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
         let (mut finished,
@@ -63,12 +62,12 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
             mut read_of_current_chunk,
             mut chunk_size,
             mut trailers_first_time
-        ) = read_chunks(body_so_far, buffer2, "metadata", 0, 0,0, &expected_trailers);
+        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, 0, &expected_trailers);
 
         trailers = trailers_first_time;
 
         while !finished {
-            let mut buffer = [0 as u8; BUFFER_SIZE];
+            let mut buffer = [0 as u8; 16384];
             let next = stream.read(&mut buffer);
             let (is_finished,
                 current_mode,
@@ -76,7 +75,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
                 up_to_in_chunk,
                 current_chunk_size,
                 new_trailers
-            ) = read_chunks(&buffer, buffer2, in_mode.as_str(), read_of_current_chunk, total_read_so_far,chunk_size, &expected_trailers);
+            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, total_read_so_far, chunk_size, &expected_trailers);
 
             in_mode = current_mode;
             total_read_so_far += bytes_read;
@@ -87,7 +86,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
         }
         headers = headers.add(("Content-Length", total_read_so_far.to_string().as_str()))
             .remove("Transfer-Encoding");
-        body = BodyStream(Box::new(buffer2.take(total_read_so_far as u64)));
+        body = BodyStream(Box::new(chunks_vec.take(total_read_so_far as u64)));
     } else {
         match content_length {
             Some(_) if is_req_and_method_cannot_have_body => {
@@ -141,7 +140,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     }
 }
 
-fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, mut expected_trailers: &Option<String>) -> (bool, String, usize, usize, usize, Headers) {
+fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, mut expected_trailers: &Option<String>) -> (bool, String, usize, usize, usize, Headers) {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -177,7 +176,7 @@ fn read_chunks(reader: &[u8], writer: &mut [u8], mut last_mode: &str, read_up_to
             continue;
         }
         if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_read) {
-            writer[total_read_so_far + bytes_read_from_current_chunk] = *octet;
+            writer.push(*octet);
             bytes_read_from_current_chunk += 1;
             // if last index, add on the bytes read from current chunk
             if index == reader.len() - 1 {
