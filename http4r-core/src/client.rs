@@ -76,11 +76,11 @@ impl Handler for Client {
 
         //todo() read and write timeouts
 
-        let mut buffer = [0; 16384];
+        let mut first_read = [0; 16384];
         let mut buffer2 = [0; 1048576];
-        let first_read = stream.try_clone().unwrap().read(&mut buffer).unwrap();
+        let first_read_bytes = stream.try_clone().unwrap().read(&mut first_read).unwrap();
 
-        let result = message_from(&buffer, stream.try_clone().unwrap(), first_read, &mut buffer2);
+        let result = message_from(&first_read, stream.try_clone().unwrap(), first_read_bytes, &mut buffer2);
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,

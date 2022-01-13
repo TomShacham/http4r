@@ -28,8 +28,8 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usize, buffer2: &'a mut [u8]) -> Result<HttpMessage<'a>, MessageError> {
-    let metadata_result = start_line_and_headers_from(buffer);
+pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_bytes: usize, buffer2: &'a mut [u8]) -> Result<HttpMessage<'a>, MessageError> {
+    let metadata_result = start_line_and_headers_from(first_read);
     if metadata_result.is_err() {
         return Err(metadata_result.err().unwrap());
     }
@@ -56,7 +56,7 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
     if let Some(_encoding) = transfer_encoding {
         const BUFFER_SIZE: usize = 16384;
         let expected_trailers =  headers.get("Trailers");
-        let body_so_far = &buffer[end_of_headers_index..first_read];
+        let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
         let (mut finished,
             mut in_mode,
             mut total_read_so_far,
@@ -95,15 +95,15 @@ pub fn message_from<'a>(buffer: &'a [u8], mut stream: TcpStream, first_read: usi
                 body = Body::empty()
             }
             // we have read the whole body in the first read
-            Some(Ok(content_length)) if first_read > end_of_headers_index
-                && (first_read - end_of_headers_index) == content_length => {
-                let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
+            Some(Ok(content_length)) if first_read_bytes > end_of_headers_index
+                && (first_read_bytes - end_of_headers_index) == content_length => {
+                let result = str::from_utf8(&first_read[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
                 body = Body::BodyString(result)
             }
             Some(Ok(content_length)) => {
-                if first_read > end_of_headers_index {
-                    let body_so_far = &buffer[end_of_headers_index..first_read];
-                    let body_so_far_size = first_read - end_of_headers_index;
+                if first_read_bytes > end_of_headers_index {
+                    let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
+                    let body_so_far_size = first_read_bytes - end_of_headers_index;
                     let rest = stream.take(content_length as u64 - body_so_far_size as u64);
                     body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
                 } else {

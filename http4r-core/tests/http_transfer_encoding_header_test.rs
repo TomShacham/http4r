@@ -101,7 +101,7 @@ mod tests {
          Trailer = 1#field-name
      */
     #[test]
-    fn supports_trailers() {
+    fn supports_trailers_parsing_into_a_body() {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 

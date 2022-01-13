@@ -56,10 +56,10 @@ impl Server where {
 
     fn handle_request<F, H>(handler: Arc<F>, mut stream: TcpStream)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
-        let buffer = &mut [0 as u8; 16384];
+        let first_read = &mut [0 as u8; 16384];
         let mut buffer2 = [0; 1048576];
-        let first_read = stream.read(buffer).unwrap();
-        let result = message_from(buffer, stream.try_clone().unwrap(), first_read, &mut buffer2);
+        let first_read_bytes = stream.read(first_read).unwrap();
+        let result = message_from(first_read, stream.try_clone().unwrap(), first_read_bytes, &mut buffer2);
 
         match result {
             Err(MessageError::HeadersTooBig(msg)) | Err(MessageError::InvalidContentLength(msg)) => {
