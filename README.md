@@ -30,13 +30,9 @@
     - read and write to database
 ---
 - core api
-  - support trailers
-    - if at the end of the buffer but we need to read again to get trailers 
-    - test works when using a BodyStream of chunks
-    - support streaming onto next server in chunks 
-    - and: client send chunks from a stream (not read_to_end)
-    - if version is known to be 1.0 then do not send chunked message
-  - client to use Host header eg Dans
+  - if version is known to be 1.0 then do not send chunked message
+    - stream into memory and forward as content-length 
+  - client to use Host header eg Dan's
   - support compression
   - set a body length limit
   - multipart form data
@@ -44,7 +40,7 @@
   - should query be separate or part of Uri
   - default response headers, content-type, content-length, date
   - support http/1.0 - ie. read til socket close or EOF
-    - support Connection: close
+  - support Connection: close
   - refactor to parser combinator
   - bidi routing (can we do this without lenses?)
   - support http/2.0
