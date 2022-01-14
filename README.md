@@ -23,25 +23,22 @@
 
 - example app
   - write html file handler with appropriate content-type headers and serve 
-  local webpage that loads in wasm app and runs tests
-    - routing example using match request { destructuring } which will be badass!
-    - even better, do this as puppeteer suite
+  - local webpage that loads in wasm app and runs tests
     - JSON body parser
     - read and write to database
 ---
 - core api
   - if version is known to be 1.0 then do not send chunked message
     - stream into memory and forward as content-length 
+  - multipart form data
   - client to use Host header eg Dan's
   - support compression
   - set a body length limit
-  - multipart form data
   - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
-  - should query be separate or part of Uri
   - default response headers, content-type, content-length, date
   - support http/1.0 - ie. read til socket close or EOF
-  - support Connection: close
-  - refactor to parser combinator
+    - support Connection: close
+  - refactor to parser combinator??
   - bidi routing (can we do this without lenses?)
   - support http/2.0
 
