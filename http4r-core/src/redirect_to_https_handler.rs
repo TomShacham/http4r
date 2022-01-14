@@ -11,7 +11,7 @@ pub struct RedirectToHttpsHandler<H> where H: Handler {
 }
 
 impl<H> Handler for RedirectToHttpsHandler<H> where H: Handler {
-    fn handle<F>(self: &mut RedirectToHttpsHandler<H>, req: Request, fun: F) -> ()
+    fn handle<'a, F>(self: &mut RedirectToHttpsHandler<H>, req: Request<'a>, fun: F) -> ()
         where F: FnOnce(Response) -> () + Sized {
         if self.env.get("environment") == Some(&"production".to_string()) && req.uri.scheme != Some("https") {
             let redirect = Response::moved_permanently(

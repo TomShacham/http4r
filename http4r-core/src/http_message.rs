@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter};
-use std::io::Read;
+use std::io::{copy, Read, Write};
 use std::net::TcpStream;
 use std::str;
+
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
@@ -14,6 +15,20 @@ pub enum HttpMessage<'a> {
 }
 
 impl<'a> HttpMessage<'a> {
+    pub fn is_req(&self) -> bool {
+        match self {
+            HttpMessage::Request(_) => true,
+            HttpMessage::Response(_) => false
+        }
+    }
+
+    pub fn is_res(&self) -> bool {
+        match self {
+            HttpMessage::Request(_) => false,
+            HttpMessage::Response(_) => true
+        }
+    }
+
     pub fn to_req(self) -> Request<'a> {
         match self {
             HttpMessage::Request(req) => req,
@@ -36,6 +51,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     let (end_of_headers_index, start_line, mut headers) = metadata_result.ok().unwrap();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
+    let is_request = !is_response;
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
     let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
 
@@ -55,6 +71,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
 
     if let Some(_encoding) = transfer_encoding {
         let expected_trailers = headers.get("Trailer");
+        let happy_to_receive_trailers = headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
         let cleansed_trailers = expected_trailers
             .map(|ts| ts.split(", ")
                 .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
@@ -62,37 +79,48 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
                 .collect::<Vec<String>>())
             .unwrap_or(vec!());
         let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
+
         let (mut finished,
             mut in_mode,
-            mut total_read_so_far,
+            mut total_bytes_read,
             mut read_of_current_chunk,
             mut chunk_size,
-            mut trailers_first_time
-        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, 0, &cleansed_trailers);
+            trailers_first_time
+        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, &cleansed_trailers);
 
         trailers = trailers_first_time;
 
         while !finished {
             let mut buffer = [0 as u8; 16384];
-            let next = stream.read(&mut buffer);
+            stream.read(&mut buffer).unwrap();
+
             let (is_finished,
                 current_mode,
                 bytes_read,
                 up_to_in_chunk,
                 current_chunk_size,
                 new_trailers
-            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, total_read_so_far, chunk_size, &cleansed_trailers);
+            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, &cleansed_trailers);
 
             in_mode = current_mode;
-            total_read_so_far += bytes_read;
+            total_bytes_read += bytes_read;
             read_of_current_chunk = up_to_in_chunk;
             chunk_size = current_chunk_size;
             trailers = new_trailers;
             finished = is_finished;
         }
-        headers = headers.add(("Content-Length", total_read_so_far.to_string().as_str()))
-            .remove("Transfer-Encoding");
-        body = BodyStream(Box::new(chunks_vec.take(total_read_so_far as u64)));
+
+        if !happy_to_receive_trailers {
+            headers = headers.add_all(trailers);
+            trailers = Headers::empty();
+        }
+        // should only be doing this if we are talking to a user agent that does not accept chunked encoding
+        // otherwise keep chunked encoding header
+        if is_request && part3 == "HTTP/1.0" {
+            headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
+                .remove("Transfer-Encoding");
+        }
+        body = BodyStream(Box::new(chunks_vec.take(total_bytes_read as u64)));
     } else {
         match content_length {
             Some(_) if is_req_and_method_cannot_have_body => {
@@ -145,12 +173,11 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     }
 }
 
-fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, mut last_mode: &str, read_up_to: usize, total_read_so_far: usize, this_chunk_size: usize, mut expected_trailers: &Vec<String>) -> (bool, String, usize, usize, usize, Headers) {
+fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, expected_trailers: &Vec<String>) -> (bool, String, usize, usize, usize, Headers) {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
     let mut bytes_of_this_chunk_read = read_up_to;
-    let mut last_complete_chunk_index: usize = 0;
     let mut finished = false;
     let mut bytes_read_from_current_chunk: usize = 0;
     let mut total_bytes_read: usize = 0;
@@ -170,7 +197,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, mut last_mode: &str, read_up
             if chunk_size == 0 { // we have encountered the 0 chunk
                 //todo() if at the end of the buffer but we need to read again to get trailers
                 finished = true;
-                start_of_trailers = index + 5; // add 5 cos we didn't read the \r\n\r\n after the 0
+                start_of_trailers = index + 3; // add 5 cos we didn't read the \r\n after the 0
                 break;
             }
         } else if mode == "metadata" && on_boundary {
@@ -193,7 +220,6 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, mut last_mode: &str, read_up
             // if we're on the boundary, continue, or change mode to metadata once we've seen \n
             // and reset counters
             if *octet == b'\n' {
-                last_complete_chunk_index += chunk_size;
                 total_bytes_read += bytes_read_from_current_chunk;
                 bytes_of_this_chunk_read = 0;
                 chunk_size = 0;
@@ -237,7 +263,7 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
         end_of_headers_index += 1;
 
         if first_line.is_none() && prev[3] == '\r' && *char == b'\n' {
-            first_line = Some(&buffer[..end_of_headers_index]);
+            first_line = Some(&buffer[..end_of_headers_index - 2]);
             end_of_start_line = end_of_headers_index;
         }
         if !first_line.is_none() && prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *char == b'\n' {
@@ -265,6 +291,128 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
     Ok((end_of_headers_index, start_line, headers))
 }
 
+pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
+    match message {
+        HttpMessage::Request(mut req) => {
+            let has_transfer_encoding = req.headers.has("Transfer-Encoding");
+            let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, has_transfer_encoding, &req.version)
+                .unwrap_or(req.headers);
+
+            let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
+                                         req.method.value(),
+                                         req.uri.to_string(),
+                                         req.version.major,
+                                         req.version.minor,
+                                         headers.to_wire_string());
+
+            stream.write(request_string.as_bytes()).unwrap();
+
+            match req.body {
+                BodyString(str) => {
+                    if req.version != one_pt_one() {
+                        stream.write(str.as_bytes()).unwrap();
+                    } else if has_transfer_encoding {
+                        write_chunked_string(stream, str, req.trailers);
+                    } else {
+                        stream.write(str.as_bytes()).unwrap();
+                    }
+                }
+                BodyStream(ref mut reader) => {
+                    if has_transfer_encoding && req.version == one_pt_one() {
+                        write_chunked_stream(stream, reader, req.trailers);
+                    } else {
+                        let _copy = copy(reader, &mut stream).unwrap();
+                    }
+                }
+            }
+        }
+        HttpMessage::Response(mut res) => {
+            let has_transfer_encoding = res.headers.has("Transfer-Encoding");
+            let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
+                .unwrap_or(res.headers);
+            let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
+            let chunked_encoding_desired = headers.has("Transfer-Encoding");
+
+            stream.write(status_and_headers.as_bytes()).unwrap();
+
+            match res.body {
+                BodyString(body_string) => {
+                    if chunked_encoding_desired && res.version == one_pt_one() {
+                        write_chunked_string(stream, &body_string, res.trailers);
+                    } else {
+                        stream.write(&body_string.as_bytes()).unwrap();
+                        if !res.trailers.is_empty() {
+                            stream.write(format!("\r\n{}\r\n\r\n", res.trailers.to_wire_string()).as_bytes()).unwrap();
+                        }
+                    }
+                }
+                BodyStream(ref mut reader) => {
+                    if chunked_encoding_desired && res.version == one_pt_one() {
+                        write_chunked_stream(&mut stream, reader, res.trailers);
+                    } else {
+                        let _copy = copy(reader, &mut stream).unwrap();
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn write_chunked_string(stream: &mut TcpStream, chunk: &str, trailers: Headers) {
+    let mut transfer = "".to_string();
+    let length = chunk.len().to_string();
+    let end = "0\r\n";
+
+    transfer.push_str(length.as_str());
+    transfer.push_str("\r\n");
+    transfer.push_str(chunk);
+    transfer.push_str("\r\n");
+    transfer.push_str(end);
+
+    if !trailers.is_empty() {
+        transfer.push_str(format!("{}\r\n\r\n", trailers.to_wire_string()).as_str());
+    }
+
+    stream.write(transfer.as_bytes()).unwrap();
+}
+
+
+pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, trailers: Headers) {
+    let buffer = &mut [0 as u8; 16384];
+    let mut bytes_read = reader.read(buffer).unwrap_or(0);
+
+    while bytes_read > 0 {
+        let mut temp = vec!();
+        temp.extend_from_slice(bytes_read.to_string().as_bytes());
+        temp.push(b'\r');
+        temp.push(b'\n');
+        temp.append(&mut buffer[..bytes_read].to_vec());
+        temp.push(b'\r');
+        temp.push(b'\n');
+        // write to wire
+        let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
+
+        bytes_read = reader.read(buffer).unwrap_or(0);
+    }
+    // write end byte
+    let mut end = vec!(b'0', b'\r', b'\n');
+    if !trailers.is_empty() {
+        end.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
+    }
+    stream.write(end.as_slice()).unwrap();
+}
+
+pub fn ensure_content_length_or_transfer_encoding(headers: &Headers, body: &Body, has_transfer_encoding: bool, version: &HttpVersion) -> Option<Headers> {
+    let has_content_length = headers.has("Content-Length");
+    if !has_content_length && !has_transfer_encoding && body.is_body_string() {
+        Some(headers.add(("Content-Length", body.length().to_string().as_str())))
+    } else if !has_content_length && !has_transfer_encoding && body.is_body_stream() && version == &one_pt_one() {
+        Some(headers.add(("Transfer-Encoding", "chunked")))
+    } else {
+        None
+    }
+}
+
 fn http_version_from(str: &str) -> (u8, u8) {
     let mut version_chars = str.chars();
     let major = version_chars.nth(0);
@@ -286,13 +434,13 @@ impl Display for MessageError {
 }
 
 impl<'a> Response<'a> {
-    pub fn status_line_and_headers(&self) -> String {
+    pub fn status_line_and_headers_wire_string(headers: &Headers, status: &Status) -> String {
         let mut response = String::new();
-        let http = format!("HTTP/1.1 {} {}", &self.status.value(), &self.status.to_string());
+        let http = format!("HTTP/1.1 {} {}", &status.value(), &status.to_string());
         response.push_str(&http);
         response.push_str("\r\n");
 
-        response.push_str(&self.headers.to_wire_string().as_str());
+        response.push_str(&headers.to_wire_string().as_str());
 
         response.push_str("\r\n\r\n");
         response
@@ -341,7 +489,7 @@ pub fn body_length(body: &Body) -> u32 {
 pub fn with_content_length(message: HttpMessage) -> HttpMessage {
     match message {
         HttpMessage::Request(request) => {
-            if !request.headers.has("Content-Length") {
+            if !request.headers.has("Content-Length") && !request.headers.has("Transfer-Encoding") {
                 return HttpMessage::Request(Request {
                     headers: request.headers.add(("Content-Length", body_length(&request.body).to_string().as_str())),
                     ..request
@@ -351,7 +499,7 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
             }
         }
         HttpMessage::Response(response) => {
-            if !response.headers.has("Content-Length") {
+            if !response.headers.has("Content-Length") && !response.headers.has("Transfer-Encoding") {
                 return HttpMessage::Response(Response {
                     headers: response.headers.add(("Content-Length", body_length(&response.body).to_string().as_str())),
                     ..response
@@ -363,6 +511,7 @@ pub fn with_content_length(message: HttpMessage) -> HttpMessage {
     }
 }
 
+#[derive(PartialEq)]
 pub struct HttpVersion {
     pub major: u8,
     pub minor: u8,
@@ -370,6 +519,14 @@ pub struct HttpVersion {
 
 pub fn one_pt_one() -> HttpVersion {
     HttpVersion { major: 1, minor: 1 }
+}
+
+pub fn two_pt_oh() -> HttpVersion {
+    HttpVersion { major: 2, minor: 0 }
+}
+
+pub fn one_pt_oh() -> HttpVersion {
+    HttpVersion { major: 1, minor: 0 }
 }
 
 pub struct Request<'a> {
@@ -418,7 +575,7 @@ pub fn body_string(mut body: Body) -> String {
         BodyString(str) => str.to_string(),
         BodyStream(ref mut reader) => {
             let big = &mut Vec::new();
-            let _read_bytes = reader.read_to_end(big).unwrap();
+            let _read_bytes = reader.read_to_end(big).unwrap(); //todo() this blows up sometimes! unwrap_or()?
             str::from_utf8(&big).unwrap()
                 .trim_end_matches(char::from(0))
                 .to_string()

@@ -22,7 +22,7 @@ impl Handler for PassThroughHandler {
         let response = if req.trailers.is_empty() {
             Response::ok(req.headers, req.body)
         } else {
-            Response::ok(req.headers, req.body).with_headers(req.trailers)
+            Response::ok(req.headers, req.body).with_trailers(req.trailers)
         };
         fun(response);
     }

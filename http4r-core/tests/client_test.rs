@@ -12,6 +12,8 @@ mod tests {
     use http4r_core::uri::Uri;
     use crate::common::PassThroughHandler;
 
+    //todo() test that the client will do a chunked transfer encoding if we dont have content length
+    // and we have a bodystream (ie we cant know content length ahead of time)
 }
 
 /*

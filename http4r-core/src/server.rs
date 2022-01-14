@@ -4,7 +4,7 @@ use std::io::{copy, Read, Write};
 use std::sync::Arc;
 use crate::handler::Handler;
 use crate::headers::Headers;
-use crate::http_message::{HttpMessage, message_from, MessageError, Response, with_content_length};
+use crate::http_message::{HttpMessage, message_from, MessageError, Response, with_content_length, write_chunked_stream, write_chunked_string};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::pool::ThreadPool;
 
@@ -84,24 +84,30 @@ impl Server where {
         stream.flush().unwrap();
     }
 
+    // todo() replace with shared code
     fn write_response_to_wire(mut stream: &mut TcpStream, response: Response) {
-        let mut response = with_content_length(HttpMessage::Response(response)).to_res();
-        let mut returning: String = response.status_line_and_headers();
+        let response = with_content_length(HttpMessage::Response(response)).to_res();
+        let mut returning: String = Response::status_line_and_headers_wire_string(&response.headers, &response.status);
+        let chunked_encoding_desired = response.headers.has("Transfer-Encoding");
 
-        match response.body {
-            BodyString(body_string) => {
+        match (response.body, chunked_encoding_desired) {
+            (BodyString(body_string), false) => {
                 returning.push_str(&body_string);
                 if !response.trailers.is_empty() {
                     returning.push_str(format!("\r\n{}\r\n\r\n", response.trailers.to_wire_string()).as_str());
                 }
                 stream.write(returning.as_bytes()).unwrap();
+            },
+            (BodyString(body_string), true) => {
+                write_chunked_string(stream, &body_string, response.trailers);
             }
-            BodyStream(ref mut body_stream) => {
+            (BodyStream(ref mut body_stream), false) => {
                 let _status_line_and_headers = stream.write(returning.as_bytes()).unwrap();
                 let _copy = copy(body_stream, &mut stream).unwrap();
-                if !response.trailers.is_empty() {
-                    returning.push_str(format!("\r\n{}\r\n\r\n", response.trailers.to_wire_string()).as_str());
-                }
+            },
+            (BodyStream(ref mut reader), true) => {
+                let _status_line_and_headers = stream.write(returning.as_bytes()).unwrap();
+                write_chunked_stream(&mut stream, reader, response.trailers);
             }
         }
     }

@@ -5,7 +5,7 @@ pub struct Headers {
 pub type HeaderType = (String, String);
 pub type HeadersType = Vec<HeaderType>;
 
-pub static DISALLOWED_TRAILERS: [&'static str; 21] = [
+pub static DISALLOWED_TRAILERS: [&'static str; 22] = [
     //authorization
     "authorization",
     "www-authenticate",
@@ -31,6 +31,7 @@ pub static DISALLOWED_TRAILERS: [&'static str; 21] = [
     "te",
     //routing
     "host",
+    "connection"
 ];
 
 
