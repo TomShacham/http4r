@@ -192,7 +192,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
         if mode == "metadata" && !on_boundary {
             // if we have a digit, multiply last digit by 10 and add this one
             // if first digit we encounter is 0 then we'll multiply 0 by 10 and get 0
-            // ...
+            // ... and know that we are at the end
             chunk_size = (chunk_size * 10) + (*octet as char).to_digit(10).unwrap() as usize;
             if chunk_size == 0 { // we have encountered the 0 chunk
                 //todo() if at the end of the buffer but we need to read again to get trailers
@@ -230,7 +230,8 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
         }
     }
 
-    //todo() what if you need to do another read to get all the trailers? finished should be false until we finish reading trailers
+    //todo() what if you need to do another read to get all the trailers?
+    // finished should be false until we finish reading trailers
     if finished && !expected_trailers.is_empty() {
         let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
         if let Ok((_, _, headers)) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice()) {
