@@ -19,7 +19,7 @@ impl Handler for Client {
         let mut first_read = [0; 16384];
         let first_read_bytes = stream.try_clone().unwrap().read(&mut first_read).unwrap();
 
-        let result = message_from(&first_read, stream.try_clone().unwrap(), first_read_bytes, &mut chunks_vec);
+        let result = message_from(&first_read, stream.try_clone().unwrap(), first_read_bytes, &mut chunks_vec, 16384);
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,

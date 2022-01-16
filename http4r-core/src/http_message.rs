@@ -43,8 +43,8 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_bytes: usize, chunks_vec: &'a mut Vec<u8>) -> Result<HttpMessage<'a>, MessageError> {
-    let metadata_result = start_line_and_headers_from(first_read);
+pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_bytes: usize, chunks_vec: &'a mut Vec<u8>, start_line_and_headers_limit: usize) -> Result<HttpMessage<'a>, MessageError> {
+    let metadata_result = start_line_and_headers_from(first_read, start_line_and_headers_limit);
     if metadata_result.is_err() {
         return Err(metadata_result.err().unwrap());
     }
@@ -85,7 +85,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
             mut read_of_current_chunk,
             mut chunk_size,
             trailers_first_time
-        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, &cleansed_trailers);
+        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, &cleansed_trailers, start_line_and_headers_limit);
 
         trailers = trailers_first_time;
 
@@ -100,7 +100,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
                 up_to_in_chunk,
                 current_chunk_size,
                 new_trailers
-            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, &cleansed_trailers);
+            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, &cleansed_trailers, start_line_and_headers_limit);
 
             in_mode = current_mode;
             total_bytes_read += bytes_read;
@@ -174,7 +174,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
 }
 
 // todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
-fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, expected_trailers: &Vec<String>) -> (bool, String, usize, usize, usize, Headers) {
+fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, expected_trailers: &Vec<String>, limit: usize) -> (bool, String, usize, usize, usize, Headers) {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -240,7 +240,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
     // finished should be false until we finish reading trailers
     if finished && !expected_trailers.is_empty() {
         let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
-        if let Ok((_, _, headers)) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice()) {
+        if let Ok((_, _, headers)) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice(), limit) {
             println!("start of trailers {} {} , headers {}", start_of_trailers, reader.len(), headers.to_wire_string());
             trailers = headers.filter(expected_trailers.iter().map(|s| s as &str).collect())
         }
@@ -261,7 +261,7 @@ fn check_valid_content_length_or_transfer_encoding(headers: &mut Headers, is_res
     Ok(())
 }
 
-fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Headers), MessageError> {
+fn start_line_and_headers_from(buffer: &[u8], limit: usize) -> Result<(usize, Vec<&str>, Headers), MessageError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut end_of_headers_index = 0;
     let mut end_of_start_line = 0;
@@ -285,15 +285,13 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
             end_of_headers_index = index + 1;
             break;
         }
-        if index == buffer.len() - 1 {
+        if index > limit {
             // todo() do one more read??? or allow user to set a limit on headers/trailers?
+            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
         }
 
         prev.remove(0);
         prev.push(*octet as char);
-        if end_of_headers_index > buffer.len() {
-            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
-        }
     }
     let header_string = if headers.is_none() { "" } else {
         str::from_utf8(&headers.unwrap()).unwrap()
