@@ -270,25 +270,25 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
     let mut finished = false;
 
     for (index, octet) in buffer.iter().enumerate() {
-        end_of_headers_index += 1;
-
         if first_line.is_none() && prev[3] == '\r' && *octet == b'\n' {
-            first_line = Some(&buffer[..end_of_headers_index - 2]);
-            end_of_start_line = end_of_headers_index;
+            first_line = Some(&buffer[..index - 1]);
+            end_of_start_line = index + 1;
         }
         if !first_line.is_none() && prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
-            let end_of_headers = end_of_headers_index - 4; // end is behind the \r\n\r\n chars (ie back 4)
+            let end_of_headers = index - 3; // end is behind the \r\n\r\n chars (ie back 4)
             if end_of_start_line > end_of_headers {
                 headers = None
             } else {
                 headers = Some(&buffer[end_of_start_line..end_of_headers]);
             }
             finished = true;
+            end_of_headers_index = index + 1;
             break;
         }
         if index == buffer.len() - 1 {
             // todo() do one more read??? or allow user to set a limit on headers/trailers?
         }
+
         prev.remove(0);
         prev.push(*octet as char);
         if end_of_headers_index > buffer.len() {
