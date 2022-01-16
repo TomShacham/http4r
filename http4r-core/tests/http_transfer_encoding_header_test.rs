@@ -275,10 +275,6 @@ When a chunked message containing a non-empty trailer is received,
     }
 
 
-    //server should not set content-length if transfer-encoding chunked set
-    //test that if version 1.0 then buffer into memory otherwise return chunked response
-
-
     /*
     The "TE" header field in a request indicates what transfer codings,
    besides chunked, the client is willing to accept in response, and
@@ -338,8 +334,45 @@ When a chunked message containing a non-empty trailer is received,
         println!("ROCK AND STONE BROTHER?");
     }
 
-    //test that we remove transfer encoding unless trailer set to accept it ?
+    //test that we read the body into non chunked encoding if it's http 1.0
 
+
+    //todo() test for headers too big in http_test
+    #[test]
+    fn if_trailers_are_too_long_we_get_an_error(){
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassThroughHandler {}) });
+        let mut client = Client { base_uri: "127.0.0.1".to_string(), port: server.port };
+
+        let very_long_trailer = "A very long trailer. ".repeat(1000);
+        let body = "hello";
+        let asks_for_trailers = Request::post(
+            Uri::parse("/bob"),
+            Headers::from(vec!(
+                ("Transfer-Encoding", "chunked"),
+                ("Trailer", "Expires"),
+                ("TE", "trailers, deflate;q=0.5")
+            )),
+            BodyString(body),
+        ).with_trailers(Headers::from(vec!(
+            ("Expires", very_long_trailer.as_str()),
+        )));
+
+        client.handle(asks_for_trailers, |response: Response| {
+            assert_eq!(OK, response.status);
+            assert_eq!(body, body_string(response.body));
+            // Transfer-Encoding header should NOT be here now
+            assert_eq!(vec!(
+                //Expires should be in trailers
+                ("Transfer-Encoding".to_string(), "chunked".to_string()),
+                ("Trailer".to_string(), "Expires".to_string()),
+                ("TE".to_string(), "trailers, deflate;q=0.5".to_string()),
+            ), response.headers.vec);
+            assert_eq!(vec!(
+                ("Expires".to_string(), very_long_trailer),
+            ), response.trailers.vec);
+        });
+    }
     //test trailers cant be really long
 
     //test that if client accepts trailers TE then it keeps em and we keep message chunked ???

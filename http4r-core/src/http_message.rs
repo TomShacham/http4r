@@ -53,7 +53,6 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     let is_response = part1.starts_with("HTTP");
     let is_request = !is_response;
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
-    let is_req_and_method_cannot_have_body = !is_response && !method_can_have_body;
 
     if let Err(e) = check_valid_content_length_or_transfer_encoding(&mut headers, is_response, method_can_have_body) {
         return Err(e);
@@ -92,7 +91,8 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
 
         while !finished {
             let mut buffer = [0 as u8; 16384];
-            stream.read(&mut buffer).unwrap();
+            let result = stream.read(&mut buffer);
+            if result.is_err() { continue };
 
             let (is_finished,
                 current_mode,
@@ -123,7 +123,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
         body = BodyStream(Box::new(chunks_vec.take(total_bytes_read as u64)));
     } else {
         match content_length {
-            Some(_) if is_req_and_method_cannot_have_body => {
+            Some(_) if is_request && !method_can_have_body => {
                 headers = headers.replace(("Content-Length", "0"));
                 body = Body::empty()
             }
@@ -173,6 +173,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     }
 }
 
+// todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
 fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, expected_trailers: &Vec<String>) -> (bool, String, usize, usize, usize, Headers) {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
@@ -193,7 +194,11 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
             // if we have a digit, multiply last digit by 10 and add this one
             // if first digit we encounter is 0 then we'll multiply 0 by 10 and get 0
             // ... and know that we are at the end
-            chunk_size = (chunk_size * 10) + (*octet as char).to_digit(10).unwrap() as usize;
+            let option = (*octet as char).to_digit(10);
+            if option.is_none() {
+                println!("tried to digitise {}", *octet as char)
+            }
+            chunk_size = (chunk_size * 10) + option.unwrap() as usize;
             if chunk_size == 0 { // we have encountered the 0 chunk
                 //todo() if at the end of the buffer but we need to read again to get trailers
                 finished = true;
@@ -210,8 +215,9 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
         if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_read) {
             writer.push(*octet);
             bytes_read_from_current_chunk += 1;
-            // if last index, add on the bytes read from current chunk
-            if index == reader.len() - 1 {
+            let last_iteration = index == reader.len() - 1;
+            if last_iteration {
+                // if last index, add on the bytes read from current chunk
                 bytes_of_this_chunk_read += bytes_read_from_current_chunk;
                 total_bytes_read += bytes_read_from_current_chunk;
                 break;
@@ -235,6 +241,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
     if finished && !expected_trailers.is_empty() {
         let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
         if let Ok((_, _, headers)) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice()) {
+            println!("start of trailers {} {} , headers {}", start_of_trailers, reader.len(), headers.to_wire_string());
             trailers = headers.filter(expected_trailers.iter().map(|s| s as &str).collect())
         }
     }
@@ -260,24 +267,30 @@ fn start_line_and_headers_from(buffer: &[u8]) -> Result<(usize, Vec<&str>, Heade
     let mut end_of_start_line = 0;
     let mut first_line = None;
     let mut headers = None;
-    for char in buffer {
+    let mut finished = false;
+
+    for (index, octet) in buffer.iter().enumerate() {
         end_of_headers_index += 1;
 
-        if first_line.is_none() && prev[3] == '\r' && *char == b'\n' {
+        if first_line.is_none() && prev[3] == '\r' && *octet == b'\n' {
             first_line = Some(&buffer[..end_of_headers_index - 2]);
             end_of_start_line = end_of_headers_index;
         }
-        if !first_line.is_none() && prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *char == b'\n' {
+        if !first_line.is_none() && prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
             let end_of_headers = end_of_headers_index - 4; // end is behind the \r\n\r\n chars (ie back 4)
             if end_of_start_line > end_of_headers {
                 headers = None
             } else {
                 headers = Some(&buffer[end_of_start_line..end_of_headers]);
             }
+            finished = true;
             break;
         }
+        if index == buffer.len() - 1 {
+            // todo() do one more read??? or allow user to set a limit on headers/trailers?
+        }
         prev.remove(0);
-        prev.push(*char as char);
+        prev.push(*octet as char);
         if end_of_headers_index > buffer.len() {
             return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
         }
