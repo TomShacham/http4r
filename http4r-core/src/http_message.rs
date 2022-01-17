@@ -51,31 +51,73 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     let (end_of_headers_index, start_line, mut headers) = metadata_result.ok().unwrap();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
-    let is_request = !is_response;
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
     if let Err(e) = check_valid_content_length_or_transfer_encoding(&mut headers, is_response, method_can_have_body) {
         return Err(e);
     }
-
-    let body;
-    let content_length = headers.content_length_header();
     let transfer_encoding = headers.get("Transfer-Encoding");
     if headers.has("Content-Length") && transfer_encoding.is_some() {
         headers = headers.remove("Content-Length");
     }
-    let mut trailers= Headers::empty();
+    let result = body_from(&first_read, stream.try_clone().unwrap(), first_read_bytes, chunks_vec, start_line_and_headers_limit, end_of_headers_index, &headers, part3, !is_response, method_can_have_body, headers.content_length_header(), transfer_encoding);
+    if result.is_err() {
+        return Err(result.err().unwrap());
+    }
+    let (body, headers, trailers) = result.unwrap();
+
+    message(part1, part2, part3, is_response, body, headers, trailers)
+}
+
+fn message<'a>(part1: &'a str, part2: &'a str, part3: &'a str, is_response: bool, body: Body<'a>, headers: Headers, trailers: Headers) -> Result<HttpMessage<'a>, MessageError> {
+    if is_response {
+        let (major, minor) = http_version_from(part1);
+        Ok(HttpMessage::Response(Response {
+            status: Status::from(part2),
+            headers,
+            body,
+            version: HttpVersion { major, minor },
+            trailers,
+        }))
+    } else {
+        let (major, minor) = http_version_from(part3);
+        Ok(HttpMessage::Request(Request {
+            method: Method::from(part1),
+            uri: Uri::parse(part2),
+            headers,
+            body,
+            version: HttpVersion { major, minor },
+            trailers,
+        }))
+    }
+}
+
+fn body_from<'a>(
+    first_read: &'a [u8],
+    mut stream: TcpStream,
+    first_read_bytes: usize,
+    chunks_vec: &'a mut Vec<u8>,
+    start_line_and_headers_limit: usize,
+    end_of_headers_index: usize,
+    headers: &Headers,
+    part3: &'a str,
+    is_request: bool,
+    method_can_have_body: bool,
+    content_length: Option<Result<usize, String>>,
+    transfer_encoding: Option<String>) -> Result<(Body<'a>, Headers, Headers), MessageError> {
+    let mut body = Body::empty();
+    let mut trailers = Headers::empty();
+    let mut headers = Headers::from_headers(headers);
 
     if let Some(_encoding) = transfer_encoding {
-        let result = read_chunked_body_and_trailers(&first_read, &mut stream, first_read_bytes, chunks_vec, start_line_and_headers_limit, end_of_headers_index, &headers, part3, is_request);
+        let is_version_1_0 = part3 == "HTTP/1.0";
+        let result = read_chunked_body_and_trailers(&first_read, &mut stream, first_read_bytes, chunks_vec, start_line_and_headers_limit, end_of_headers_index, &headers, is_request, is_version_1_0);
         if result.is_err() {
             return Err(result.err().unwrap())
         }
         let (total_bytes_read, new_headers, new_trailers) = result.unwrap();
         trailers = new_trailers;
-        if !new_headers.is_empty() {
-            headers = new_headers;
-        }
+        headers = new_headers;
         body = BodyStream(Box::new(chunks_vec.take(total_bytes_read as u64)));
     } else {
         match content_length {
@@ -106,27 +148,7 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
             _ => body = Body::empty()
         }
     }
-
-    if is_response {
-        let (major, minor) = http_version_from(part1);
-        Ok(HttpMessage::Response(Response {
-            status: Status::from(part2),
-            headers,
-            body,
-            version: HttpVersion { major, minor },
-            trailers,
-        }))
-    } else {
-        let (major, minor) = http_version_from(part3);
-        Ok(HttpMessage::Request(Request {
-            method: Method::from(part1),
-            uri: Uri::parse(part2),
-            headers,
-            body,
-            version: HttpVersion { major, minor },
-            trailers,
-        }))
-    }
+    Ok((body, headers, trailers))
 }
 
 fn read_chunked_body_and_trailers(
@@ -136,12 +158,12 @@ fn read_chunked_body_and_trailers(
     chunks_vec: &mut Vec<u8>,
     start_line_and_headers_limit: usize,
     end_of_headers_index: usize,
-    mut headers: &Headers,
-    part3: &str,
-    is_request: bool
+    existing_headers: &Headers,
+    is_request: bool,
+    is_version_1_0: bool
 ) -> Result<(usize, Headers, Headers), MessageError> {
-    let expected_trailers = headers.get("Trailer");
-    let happy_to_receive_trailers = headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
+    let expected_trailers = existing_headers.get("Trailer");
+    let happy_to_receive_trailers = existing_headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
     let cleansed_trailers = expected_trailers
         .map(|ts| ts.split(", ")
             .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
@@ -156,7 +178,7 @@ fn read_chunked_body_and_trailers(
     }
     let (mut finished, mut in_mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, mut trailers_first_time) = result.unwrap();
     let mut trailers = trailers_first_time;
-    let mut headers = Headers::from_headers(headers);
+    let mut headers = Headers::from_headers(existing_headers);
 
     while !finished {
         let mut buffer = [0 as u8; 16384];
@@ -168,13 +190,7 @@ fn read_chunked_body_and_trailers(
             return Err(result.err().unwrap());
         }
 
-        let (is_finished,
-            current_mode,
-            bytes_read,
-            up_to_in_chunk,
-            current_chunk_size,
-            new_trailers
-        ) = result.unwrap();
+        let (is_finished, current_mode, bytes_read, up_to_in_chunk, current_chunk_size, new_trailers) = result.unwrap();
 
         in_mode = current_mode;
         total_bytes_read += bytes_read;
@@ -185,12 +201,13 @@ fn read_chunked_body_and_trailers(
     }
 
     if !happy_to_receive_trailers {
+        println!("adding trailers {}", trailers.to_wire_string());
         headers = headers.add_all(trailers);
         trailers = Headers::empty();
     }
     // should only be doing this if we are talking to a user agent that does not accept chunked encoding
     // otherwise keep chunked encoding header
-    if is_request && part3 == "HTTP/1.0" {
+    if is_request && is_version_1_0 {
         headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
             .remove("Transfer-Encoding");
     }
@@ -265,7 +282,6 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
     if finished && !expected_trailers.is_empty() {
         let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
         if let Ok((_, _, headers)) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice(), limit) {
-            println!("start of trailers {} {} , headers {}", start_of_trailers, reader.len(), headers.to_wire_string());
             trailers = headers.filter(expected_trailers.iter().map(|s| s as &str).collect())
         }
     }

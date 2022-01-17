@@ -182,15 +182,14 @@ When a chunked message containing a non-empty trailer is received,
             ("Content-Encoding", "gzip"),
             ("Content-Type", "text/html"),
             ("Content-Range", "bytes 200-1000/67589"),
-            //todo() add full list of disallowed trailers       https://datatracker.ietf.org/doc/html/rfc7230#section-4.1.2
         )));
 
         client.handle(with_illegal_trailers, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(little_string, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
+            assert!(response.trailers.vec.is_empty()); // trailers are empty
             assert_eq!(vec!(
-                ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
+                ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()), // valid trailer gets added to header
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range".to_string()),
             ), response.headers.vec);
