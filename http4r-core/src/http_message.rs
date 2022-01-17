@@ -58,67 +58,23 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
         return Err(e);
     }
 
-    // todo() support trailers
-
     let body;
     let content_length = headers.content_length_header();
     let transfer_encoding = headers.get("Transfer-Encoding");
     if headers.has("Content-Length") && transfer_encoding.is_some() {
         headers = headers.remove("Content-Length");
     }
-    let mut trailers = Headers::empty();
+    let mut trailers= Headers::empty();
 
     if let Some(_encoding) = transfer_encoding {
-        let expected_trailers = headers.get("Trailer");
-        let happy_to_receive_trailers = headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
-        let cleansed_trailers = expected_trailers
-            .map(|ts| ts.split(", ")
-                .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
-                .map(|t| t.to_string())
-                .collect::<Vec<String>>())
-            .unwrap_or(vec!());
-        let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
-
-        let (mut finished,
-            mut in_mode,
-            mut total_bytes_read,
-            mut read_of_current_chunk,
-            mut chunk_size,
-            trailers_first_time
-        ) = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, &cleansed_trailers, start_line_and_headers_limit);
-
-        trailers = trailers_first_time;
-
-        while !finished {
-            let mut buffer = [0 as u8; 16384];
-            let result = stream.read(&mut buffer);
-            if result.is_err() { continue };
-
-            let (is_finished,
-                current_mode,
-                bytes_read,
-                up_to_in_chunk,
-                current_chunk_size,
-                new_trailers
-            ) = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, &cleansed_trailers, start_line_and_headers_limit);
-
-            in_mode = current_mode;
-            total_bytes_read += bytes_read;
-            read_of_current_chunk = up_to_in_chunk;
-            chunk_size = current_chunk_size;
-            trailers = new_trailers;
-            finished = is_finished;
+        let result = read_chunked_body_and_trailers(&first_read, &mut stream, first_read_bytes, chunks_vec, start_line_and_headers_limit, end_of_headers_index, &headers, part3, is_request);
+        if result.is_err() {
+            return Err(result.err().unwrap())
         }
-
-        if !happy_to_receive_trailers {
-            headers = headers.add_all(trailers);
-            trailers = Headers::empty();
-        }
-        // should only be doing this if we are talking to a user agent that does not accept chunked encoding
-        // otherwise keep chunked encoding header
-        if is_request && part3 == "HTTP/1.0" {
-            headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
-                .remove("Transfer-Encoding");
+        let (total_bytes_read, new_headers, new_trailers) = result.unwrap();
+        trailers = new_trailers;
+        if !new_headers.is_empty() {
+            headers = new_headers;
         }
         body = BodyStream(Box::new(chunks_vec.take(total_bytes_read as u64)));
     } else {
@@ -173,8 +129,76 @@ pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_
     }
 }
 
+fn read_chunked_body_and_trailers(
+    first_read: &[u8],
+    stream: &mut TcpStream,
+    first_read_bytes: usize,
+    chunks_vec: &mut Vec<u8>,
+    start_line_and_headers_limit: usize,
+    end_of_headers_index: usize,
+    mut headers: &Headers,
+    part3: &str,
+    is_request: bool
+) -> Result<(usize, Headers, Headers), MessageError> {
+    let expected_trailers = headers.get("Trailer");
+    let happy_to_receive_trailers = headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
+    let cleansed_trailers = expected_trailers
+        .map(|ts| ts.split(", ")
+            .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
+            .map(|t| t.to_string())
+            .collect::<Vec<String>>())
+        .unwrap_or(vec!());
+    let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
+
+    let result = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, &cleansed_trailers, start_line_and_headers_limit);
+    if result.is_err() {
+        return Err(result.err().unwrap());
+    }
+    let (mut finished, mut in_mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, mut trailers_first_time) = result.unwrap();
+    let mut trailers = trailers_first_time;
+    let mut headers = Headers::from_headers(headers);
+
+    while !finished {
+        let mut buffer = [0 as u8; 16384];
+        let result = stream.read(&mut buffer);
+        if result.is_err() { continue };
+
+        let result = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, &cleansed_trailers, start_line_and_headers_limit);
+        if result.is_err() {
+            return Err(result.err().unwrap());
+        }
+
+        let (is_finished,
+            current_mode,
+            bytes_read,
+            up_to_in_chunk,
+            current_chunk_size,
+            new_trailers
+        ) = result.unwrap();
+
+        in_mode = current_mode;
+        total_bytes_read += bytes_read;
+        read_of_current_chunk = up_to_in_chunk;
+        chunk_size = current_chunk_size;
+        trailers = new_trailers;
+        finished = is_finished;
+    }
+
+    if !happy_to_receive_trailers {
+        headers = headers.add_all(trailers);
+        trailers = Headers::empty();
+    }
+    // should only be doing this if we are talking to a user agent that does not accept chunked encoding
+    // otherwise keep chunked encoding header
+    if is_request && part3 == "HTTP/1.0" {
+        headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
+            .remove("Transfer-Encoding");
+    }
+    Ok((total_bytes_read, headers, trailers))
+}
+
 // todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
-fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, expected_trailers: &Vec<String>, limit: usize) -> (bool, String, usize, usize, usize, Headers) {
+fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, expected_trailers: &Vec<String>, limit: usize) -> Result<(bool, String, usize, usize, usize, Headers), MessageError> {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -246,7 +270,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
         }
     }
 
-    (finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size, trailers)
+    Ok((finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size, trailers))
 }
 
 fn check_valid_content_length_or_transfer_encoding(headers: &mut Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {

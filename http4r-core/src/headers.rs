@@ -48,6 +48,14 @@ impl Headers {
         headers
     }
 
+    pub fn from_headers(headers: &Headers) -> Headers {
+        let mut new = Headers { vec: vec!() };
+        for pair in &headers.vec {
+            new = new.add((pair.0.as_str(), pair.1.as_str()))
+        }
+        new
+    }
+
     pub fn add(&self, header: (&str, &str)) -> Headers {
         let mut new: HeadersType = vec!();
         let mut exists = false;
