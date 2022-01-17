@@ -43,17 +43,17 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn message_from<'a>(first_read: &'a [u8], mut stream: TcpStream, first_read_bytes: usize, chunks_vec: &'a mut Vec<u8>, start_line_and_headers_limit: usize) -> Result<HttpMessage<'a>, MessageError> {
-    let metadata_result = start_line_and_headers_from(first_read, start_line_and_headers_limit);
-    if metadata_result.is_err() {
-        return Err(metadata_result.err().unwrap());
+pub fn message_from<'a>(first_read: &'a [u8], stream: TcpStream, first_read_bytes: usize, chunks_vec: &'a mut Vec<u8>, start_line_and_headers_limit: usize) -> Result<HttpMessage<'a>, MessageError> {
+    let result = start_line_and_headers_from(first_read, start_line_and_headers_limit);
+    if result.is_err() {
+        return Err(result.err().unwrap());
     }
-    let (end_of_headers_index, start_line, mut headers) = metadata_result.ok().unwrap();
+    let (end_of_headers_index, start_line, mut headers) = result.ok().unwrap();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
-    if let Err(e) = check_valid_content_length_or_transfer_encoding(&mut headers, is_response, method_can_have_body) {
+    if let Err(e) = check_valid_content_length_or_transfer_encoding(&headers, is_response, method_can_have_body) {
         return Err(e);
     }
     let transfer_encoding = headers.get("Transfer-Encoding");
@@ -105,7 +105,7 @@ fn body_from<'a>(
     method_can_have_body: bool,
     content_length: Option<Result<usize, String>>,
     transfer_encoding: Option<String>) -> Result<(Body<'a>, Headers, Headers), MessageError> {
-    let mut body = Body::empty();
+    let mut body;
     let mut trailers = Headers::empty();
     let mut headers = Headers::from_headers(headers);
 
@@ -176,7 +176,7 @@ fn read_chunked_body_and_trailers(
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (mut finished, mut in_mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, mut trailers_first_time) = result.unwrap();
+    let (mut finished, mut in_mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, trailers_first_time) = result.unwrap();
     let mut trailers = trailers_first_time;
     let mut headers = Headers::from_headers(existing_headers);
 
@@ -289,7 +289,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
     Ok((finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size, trailers))
 }
 
-fn check_valid_content_length_or_transfer_encoding(headers: &mut Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
+fn check_valid_content_length_or_transfer_encoding(headers: &Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
     let is_req_and_method_can_have_body = !is_response && method_can_have_body;
     let no_content_length_or_transfer_encoding = !headers.has("Content-Length") &&
         headers.get("Transfer-Encoding").is_none();
