@@ -7,7 +7,7 @@ mod tests {
     use http4r_core::headers::{Headers, HeaderType};
     use http4r_core::http_message::{body_string, Request, Response};
     use http4r_core::http_message::Body::BodyString;
-    use http4r_core::http_message::Status::OK;
+    use http4r_core::http_message::Status::{BadRequest, OK};
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
 
@@ -333,7 +333,6 @@ When a chunked message containing a non-empty trailer is received,
         println!("ROCK AND STONE BROTHER?");
     }
 
-    //test that we read the body into non chunked encoding if it's http 1.0
 
 
     //todo() test for headers too big in http_test
@@ -358,7 +357,7 @@ When a chunked message containing a non-empty trailer is received,
         )));
 
         client.handle(asks_for_trailers, |response: Response| {
-            assert_eq!(OK, response.status);
+            assert_eq!(BadRequest, response.status);
             assert_eq!(body, body_string(response.body));
             // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(
@@ -372,8 +371,9 @@ When a chunked message containing a non-empty trailer is received,
             ), response.trailers.vec);
         });
     }
-    //test trailers cant be really long
 
-    //test that if client accepts trailers TE then it keeps em and we keep message chunked ???
+    //test that we read the body into non chunked encoding if it's http 1.0
+
+    //test body stream writes chunks correctly
 
 }
