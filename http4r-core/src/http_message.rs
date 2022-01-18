@@ -105,7 +105,7 @@ fn body_from<'a>(
     method_can_have_body: bool,
     content_length: Option<Result<usize, String>>,
     transfer_encoding: Option<String>) -> Result<(Body<'a>, Headers, Headers), MessageError> {
-    let mut body;
+    let body;
     let mut trailers = Headers::empty();
     let mut headers = Headers::from_headers(headers);
 
@@ -170,41 +170,70 @@ fn read_chunked_body_and_trailers(
             .map(|t| t.to_string())
             .collect::<Vec<String>>())
         .unwrap_or(vec!());
-    let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
+    let rest = &first_read[end_of_headers_index..first_read_bytes];
 
-    let result = read_chunks(body_so_far, chunks_vec, "metadata", 0, 0, &cleansed_trailers, start_line_and_headers_limit);
+    let result = read_chunks(rest, chunks_vec, "metadata", 0, 0, start_line_and_headers_limit);
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (mut finished, mut in_mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, trailers_first_time) = result.unwrap();
-    let mut trailers = trailers_first_time;
+    let (mut finished, mut in_mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, mut start_of_trailers) = result.unwrap();
     let mut headers = Headers::from_headers(existing_headers);
 
+    let mut vec = Vec::with_capacity(16384);
+    // if start_of_trailers is equal to rest.len() then there were no more bytes after the body in the last read
+    // but if it is less than rest.len() then we have some trailers to read
+    if start_of_trailers < rest.len() {
+        vec.extend_from_slice(&rest[start_of_trailers..]);
+        start_of_trailers = 0;
+    }
+
     while !finished {
-        let mut buffer = [0 as u8; 16384];
-        let result = stream.read(&mut buffer);
+        let result = stream.read(&mut vec);
         if result.is_err() { continue; };
 
-        let result = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, &cleansed_trailers, start_line_and_headers_limit);
+        let result = read_chunks(&vec, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, start_line_and_headers_limit);
         if result.is_err() {
             return Err(result.err().unwrap());
         }
 
-        let (is_finished, current_mode, bytes_read, up_to_in_chunk, current_chunk_size, new_trailers) = result.unwrap();
+        let (is_finished, current_mode, bytes_read, up_to_in_chunk, current_chunk_size, trailers_start_at) = result.unwrap();
 
         in_mode = current_mode;
         total_bytes_read += bytes_read;
         read_of_current_chunk = up_to_in_chunk;
         chunk_size = current_chunk_size;
+        start_of_trailers = trailers_start_at;
+        finished = is_finished;
+    }
+
+    let (_, rest) = vec.split_at(start_of_trailers);
+
+    //todo() parametrise limits
+    let trailer_vec: &mut Vec<u8> = &mut Vec::with_capacity(32000);
+
+    let result = read_trailers(&rest, trailer_vec, 32000);
+    if result.is_err() {
+        return Err(result.err().unwrap());
+    }
+    let (mut finished, mut trailers) = result.unwrap();
+    while !finished {
+        let mut buffer = [0; 16384];
+        let result = stream.read(&mut buffer);
+        if result.is_err() { continue; };
+        let result = read_trailers(&buffer, trailer_vec, 32000);
+        if result.is_err() {
+            return Err(result.err().unwrap());
+        }
+        let (is_finished, new_trailers) = result.unwrap();
         trailers = new_trailers;
         finished = is_finished;
     }
 
     if !happy_to_receive_trailers {
-        println!("adding trailers {}", trailers.to_wire_string());
         headers = headers.add_all(trailers);
         trailers = Headers::empty();
     }
+
     // should only be doing this if we are talking to a user agent that does not accept chunked encoding
     // otherwise keep chunked encoding header
     if is_request && is_version_1_0 {
@@ -215,7 +244,7 @@ fn read_chunked_body_and_trailers(
 }
 
 // todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
-fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, expected_trailers: &Vec<String>, limit: usize) -> Result<(bool, String, usize, usize, usize, Headers), MessageError> {
+fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, limit: usize) -> Result<(bool, String, usize, usize, usize, usize), MessageError> {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -224,7 +253,6 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
     let mut bytes_read_from_current_chunk: usize = 0;
     let mut total_bytes_read: usize = 0;
     let mut start_of_trailers: usize = 0;
-    let mut trailers = Headers::empty();
 
     for (index, octet) in reader.iter().enumerate() {
         prev.remove(0);
@@ -277,16 +305,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
         }
     }
 
-    //todo() what if you need to do another read to get all the trailers?
-    // finished should be false until we finish reading trailers
-    if finished && !expected_trailers.is_empty() {
-        let dummy_request_line_and_trailers = ["GET / HTTP/1.1\r\n".as_bytes(), &reader[start_of_trailers..]].concat();
-        if let Ok((_, _, headers)) = start_line_and_headers_from(dummy_request_line_and_trailers.as_slice(), limit) {
-            trailers = headers.filter(expected_trailers.iter().map(|s| s as &str).collect())
-        }
-    }
-
-    Ok((finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size, trailers))
+    Ok((finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size, start_of_trailers))
 }
 
 fn check_valid_content_length_or_transfer_encoding(headers: &Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
@@ -299,6 +318,33 @@ fn check_valid_content_length_or_transfer_encoding(headers: &Headers, is_respons
         return Err(MessageError::NoContentLengthOrTransferEncoding("Content-Length or Transfer-Encoding must be provided".to_string()));
     }
     Ok(())
+}
+
+fn read_trailers(buffer: &[u8], writer: &mut Vec<u8>, limit: usize) -> Result<(bool, Headers), MessageError> {
+    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
+    let mut finished = false;
+
+    for (index, octet) in buffer.iter().enumerate() {
+        if prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
+            finished = true;
+            break;
+        }
+        if index > limit {
+            // todo() do one more read??? or allow user to set a limit on headers/trailers?
+            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
+        }
+        prev.remove(0);
+        prev.push(*octet as char);
+        writer.push(*octet);
+    }
+
+    let mut headers = Headers::empty();
+    if finished {
+        writer.pop();writer.pop();writer.pop(); // get rid of previous \r\n\r\n
+        let header_string = str::from_utf8(writer.as_slice()).unwrap();
+        headers = Headers::parse_from(header_string);
+    }
+    Ok((finished, headers))
 }
 
 fn start_line_and_headers_from(buffer: &[u8], limit: usize) -> Result<(usize, Vec<&str>, Headers), MessageError> {

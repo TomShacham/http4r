@@ -167,6 +167,7 @@ impl Headers {
         }
         header_string.split("\r\n").fold(Headers::empty(), |acc, pair| {
             let pair = pair.split(": ").collect::<Vec<&str>>();
+
             acc.add((pair[0], pair[1]))
         })
     }
