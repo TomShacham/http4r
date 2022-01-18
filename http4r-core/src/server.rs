@@ -5,27 +5,38 @@ use std::sync::Arc;
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message::{HttpMessage, message_from, MessageError, Response, write_body};
-use crate::http_message::Body::{ BodyString};
+use crate::http_message::Body::{BodyString};
 use crate::pool::ThreadPool;
 
 pub struct Server {
     pub port: u16,
+    // options: ServerOptions,
+}
+
+pub struct ServerOptions {
+    pub threadpool_size: usize,
+    pub headers_size: usize,
+    pub trailers_size: usize,
 }
 
 impl Server where {
     pub fn new(port: u16) -> Server {
         Server {
-            port
+            port,
+            // options: options.unwrap_or(ServerOptions {
+            //     headers_size: 16384,
+            //     trailers_size: 16384,
+            //     threadpool_size: 10,
+            // })
         }
     }
 
-    pub fn start<F, H>(&mut self, fun: F, mut threadpool_size: Option<u32>)
+    pub fn start<F, H>(&mut self, fun: F)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
         let listener = self.listen();
         let handler = Arc::new(fun);
 
-        let x = threadpool_size.get_or_insert(10);
-        let pool = ThreadPool::new(x.clone() as usize);
+        let pool = ThreadPool::new(10 as usize);
 
         for stream in listener.incoming() {
             let h = handler.clone();
@@ -59,7 +70,7 @@ impl Server where {
         let first_read = &mut [0 as u8; 16384];
         let mut chunks_vec = Vec::with_capacity(1048576);
         let first_read_bytes = stream.read(first_read).unwrap();
-        let result = message_from(first_read, stream.try_clone().unwrap(), first_read_bytes, &mut chunks_vec, 16384);
+        let result = message_from(first_read, stream.try_clone().unwrap(), first_read_bytes, &mut chunks_vec, 16384, 16384);
 
         match result {
             Err(MessageError::HeadersTooBig(msg)) | Err(MessageError::InvalidContentLength(msg)) => {
@@ -83,5 +94,4 @@ impl Server where {
 
         stream.flush().unwrap();
     }
-
 }

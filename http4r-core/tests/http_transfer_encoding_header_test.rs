@@ -27,7 +27,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         let little_string = "hello my baby, hello my honey, hello my ragtime gal";
 
@@ -39,7 +39,6 @@ mod tests {
         client.handle(big_chunked_request, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(little_string, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
         });
     }
@@ -49,7 +48,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         let long_string = "hello my baby hello my honey, hello my ragtime gal! ".repeat(1000);
 
@@ -61,7 +60,6 @@ mod tests {
         client.handle(big_chunked_request, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(long_string, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
         });
     }
@@ -71,7 +69,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
         let with_encoding = "hello\r\n";
 
         let big_chunked_request = Request::post(
@@ -82,7 +80,6 @@ mod tests {
         client.handle(big_chunked_request, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(with_encoding, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
         });
     }
@@ -104,7 +101,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: "127.0.0.1".to_string(), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         let little_string = "hello";
 
@@ -123,7 +120,6 @@ mod tests {
         client.handle(with_trailer, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(little_string, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
                 ("Integrity".to_string(), "Some hash".to_string()),
@@ -158,7 +154,7 @@ When a chunked message containing a non-empty trailer is received,
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: "127.0.0.1".to_string(), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         let little_string = "hello";
 
@@ -211,7 +207,7 @@ When a chunked message containing a non-empty trailer is received,
     fn dont_get_trailers_unless_TE_specified(){
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
-        let mut client = Client { base_uri: "127.0.0.1".to_string(), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         let body = "hello";
         let do_not_want_trailers = Request::post(
@@ -229,7 +225,6 @@ When a chunked message containing a non-empty trailer is received,
         client.handle(do_not_want_trailers, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(body, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(
                 //Expires is in headers not trailers now
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
@@ -257,7 +252,6 @@ When a chunked message containing a non-empty trailer is received,
         client.handle(asks_for_trailers, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(body, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
             assert_eq!(vec!(
                 //Expires should be in trailers
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
@@ -338,7 +332,7 @@ When a chunked message containing a non-empty trailer is received,
     fn if_trailers_are_too_long_we_get_an_error(){
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
-        let mut client = Client { base_uri: "127.0.0.1".to_string(), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         let very_long_trailer = "A very long trailer. ".repeat(1000);
         let body = "hello";
@@ -356,17 +350,12 @@ When a chunked message containing a non-empty trailer is received,
 
         client.handle(asks_for_trailers, |response: Response| {
             assert_eq!(BadRequest, response.status);
-            assert_eq!(body, body_string(response.body));
-            // Transfer-Encoding header should NOT be here now
+            assert_eq!("Trailers must be less than 16384", body_string(response.body));
             assert_eq!(vec!(
-                //Expires should be in trailers
-                ("Transfer-Encoding".to_string(), "chunked".to_string()),
-                ("Trailer".to_string(), "Expires".to_string()),
-                ("TE".to_string(), "trailers, deflate;q=0.5".to_string()),
+                ("Content-Length".to_string(), "32".to_string()),
             ), response.headers.vec);
-            assert_eq!(vec!(
-                ("Expires".to_string(), very_long_trailer),
-            ), response.trailers.vec);
+            let vec1: Vec<HeaderType> = vec!();
+            assert_eq!(vec1, response.trailers.vec);
         });
     }
 
