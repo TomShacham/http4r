@@ -113,7 +113,7 @@ fn body_from<'a>(
         let is_version_1_0 = part3 == "HTTP/1.0";
         let result = read_chunked_body_and_trailers(&first_read, &mut stream, first_read_bytes, chunks_vec, start_line_and_headers_limit, end_of_headers_index, &headers, is_request, is_version_1_0);
         if result.is_err() {
-            return Err(result.err().unwrap())
+            return Err(result.err().unwrap());
         }
         let (total_bytes_read, new_headers, new_trailers) = result.unwrap();
         trailers = new_trailers;
@@ -160,7 +160,7 @@ fn read_chunked_body_and_trailers(
     end_of_headers_index: usize,
     existing_headers: &Headers,
     is_request: bool,
-    is_version_1_0: bool
+    is_version_1_0: bool,
 ) -> Result<(usize, Headers, Headers), MessageError> {
     let expected_trailers = existing_headers.get("Trailer");
     let happy_to_receive_trailers = existing_headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
@@ -183,7 +183,7 @@ fn read_chunked_body_and_trailers(
     while !finished {
         let mut buffer = [0 as u8; 16384];
         let result = stream.read(&mut buffer);
-        if result.is_err() { continue };
+        if result.is_err() { continue; };
 
         let result = read_chunks(&buffer, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, &cleansed_trailers, start_line_and_headers_limit);
         if result.is_err() {
@@ -350,30 +350,28 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
             let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, has_transfer_encoding, &req.version)
                 .unwrap_or(req.headers);
 
-            let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
-                                         req.method.value(),
-                                         req.uri.to_string(),
-                                         req.version.major,
-                                         req.version.minor,
-                                         headers.to_wire_string());
-
-            stream.write(request_string.as_bytes()).unwrap();
+            let mut request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
+                                             req.method.value(),
+                                             req.uri.to_string(),
+                                             req.version.major,
+                                             req.version.minor,
+                                             headers.to_wire_string());
 
             match req.body {
                 BodyString(str) => {
-                    if req.version != one_pt_one() {
-                        stream.write(str.as_bytes()).unwrap();
-                    } else if has_transfer_encoding {
-                        write_chunked_string(stream, str, req.trailers);
+                    if has_transfer_encoding && req.version == one_pt_one() {
+                        write_chunked_string(stream, request_string, str, req.trailers);
                     } else {
-                        stream.write(str.as_bytes()).unwrap();
+                        request_string.push_str(str);
+                        stream.write(request_string.as_bytes()).unwrap();
                     }
                 }
                 BodyStream(ref mut reader) => {
                     if has_transfer_encoding && req.version == one_pt_one() {
-                        write_chunked_stream(stream, reader, req.trailers);
+                        write_chunked_stream(stream, reader, request_string, req.trailers);
                     } else {
-                        let _copy = copy(reader, &mut stream).unwrap();
+                        let mut chain = request_string.as_bytes().chain(reader);
+                        let _copy = copy(&mut chain, &mut stream).unwrap();
                     }
                 }
             }
@@ -382,17 +380,16 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
             let has_transfer_encoding = res.headers.has("Transfer-Encoding");
             let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
                 .unwrap_or(res.headers);
-            let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
+            let mut status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
-
-            stream.write(status_and_headers.as_bytes()).unwrap();
 
             match res.body {
                 BodyString(body_string) => {
                     if chunked_encoding_desired && res.version == one_pt_one() {
-                        write_chunked_string(stream, &body_string, res.trailers);
+                        write_chunked_string(stream, status_and_headers, body_string, res.trailers);
                     } else {
-                        stream.write(&body_string.as_bytes()).unwrap();
+                        status_and_headers.push_str(body_string);
+                        stream.write(status_and_headers.as_bytes()).unwrap();
                         if !res.trailers.is_empty() {
                             stream.write(format!("\r\n{}\r\n\r\n", res.trailers.to_wire_string()).as_bytes()).unwrap();
                         }
@@ -400,9 +397,10 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && res.version == one_pt_one() {
-                        write_chunked_stream(&mut stream, reader, res.trailers);
+                        write_chunked_stream(&mut stream, reader, status_and_headers, res.trailers);
                     } else {
-                        let _copy = copy(reader, &mut stream).unwrap();
+                        let mut chain = status_and_headers.as_bytes().chain(reader);
+                        let _copy = copy(&mut chain, &mut stream).unwrap();
                     }
                 }
             }
@@ -410,28 +408,28 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
     }
 }
 
-pub fn write_chunked_string(stream: &mut TcpStream, chunk: &str, trailers: Headers) {
-    let mut transfer = "".to_string();
+pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chunk: &str, trailers: Headers) {
     let length = chunk.len().to_string();
     let end = "0\r\n";
 
-    transfer.push_str(length.as_str());
-    transfer.push_str("\r\n");
-    transfer.push_str(chunk);
-    transfer.push_str("\r\n");
-    transfer.push_str(end);
+    first_line.push_str(length.as_str());
+    first_line.push_str("\r\n");
+    first_line.push_str(chunk);
+    first_line.push_str("\r\n");
+    first_line.push_str(end);
 
     if !trailers.is_empty() {
-        transfer.push_str(format!("{}\r\n\r\n", trailers.to_wire_string()).as_str());
+        first_line.push_str(format!("{}\r\n\r\n", trailers.to_wire_string()).as_str());
     }
 
-    stream.write(transfer.as_bytes()).unwrap();
+    stream.write(first_line.as_bytes()).unwrap();
 }
 
 
-pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, trailers: Headers) {
+pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {
     let buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);
+    let mut first_write = true;
 
     while bytes_read > 0 {
         let mut temp = vec!();
@@ -441,8 +439,15 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
         temp.append(&mut buffer[..bytes_read].to_vec());
         temp.push(b'\r');
         temp.push(b'\n');
+
         // write to wire
-        let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
+        if first_write {
+            let first_line_and_headers_and_first_chunk = [first_line_and_headers.as_bytes(), temp.as_slice()].concat();
+            let _copy = copy(&mut first_line_and_headers_and_first_chunk.as_slice(), &mut stream).unwrap();
+            first_write = false;
+        } else {
+            let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
+        }
 
         bytes_read = reader.read(buffer).unwrap_or(0);
     }

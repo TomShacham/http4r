@@ -333,8 +333,6 @@ When a chunked message containing a non-empty trailer is received,
         println!("ROCK AND STONE BROTHER?");
     }
 
-
-
     //todo() test for headers too big in http_test
     #[test]
     fn if_trailers_are_too_long_we_get_an_error(){
