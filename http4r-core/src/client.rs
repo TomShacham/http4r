@@ -36,6 +36,7 @@ impl Handler for Client {
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,
+            Err(e) => Response::bad_request(Headers::empty(), BodyString("An error occurred")),
             _ => Response::bad_request(Headers::empty(), BodyString("will happen if server replies with invalid response"))
         };
 

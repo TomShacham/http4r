@@ -18,7 +18,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         // multiple content-lengths of different value
         client.handle(Request::post(Uri::parse("/bob"), Headers::from(
@@ -34,7 +34,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         // content-length is duplicated but the same
         client.handle(Request::post(Uri::parse("/bob"), Headers::from(
@@ -50,7 +50,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         // content-length is negative
         client.handle(Request::post(Uri::parse("/bob"), Headers::from(
@@ -66,7 +66,7 @@ mod tests {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
 
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
         // content-length is duplicated and invalid
         client.handle(Request::post(Uri::parse("/bob"), Headers::from(

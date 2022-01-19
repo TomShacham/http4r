@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::io::{copy, Read, Write};
 use std::net::TcpStream;
 use std::str;
+use std::str::from_utf8;
 
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
@@ -182,16 +183,12 @@ fn read_chunked_body_and_trailers(
     let mut headers = Headers::from_headers(existing_headers);
 
     let mut vec = Vec::with_capacity(16384);
-    // if start_of_trailers is equal to rest.len() then there were no more bytes after the body in the last read
-    // but if it is less than rest.len() then we have some trailers to read
-    if start_of_trailers < rest.len() {
-        vec.extend_from_slice(&rest[start_of_trailers..]);
-        start_of_trailers = 0;
-    }
-
     while !finished {
         let result = stream.read(&mut vec);
         if result.is_err() { continue; };
+        if result.unwrap() == 0 {
+            break;
+        }
 
         let result = read_chunks(&vec, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, start_line_and_headers_limit);
         if result.is_err() {
@@ -199,6 +196,7 @@ fn read_chunked_body_and_trailers(
         }
 
         let (is_finished, current_mode, bytes_read, up_to_in_chunk, current_chunk_size, trailers_start_at) = result.unwrap();
+        println!("bytes read {}", bytes_read);
 
         in_mode = current_mode;
         total_bytes_read += bytes_read;
@@ -208,8 +206,41 @@ fn read_chunked_body_and_trailers(
         finished = is_finished;
     }
 
-    let (_, rest) = vec.split_at(start_of_trailers);
+    // if start_of_trailers is equal to rest.len() then there were no more bytes after the body in the last read
+    // but if it is less than rest.len() then we have some trailers to read
+    if finished && start_of_trailers < rest.len() {
+        vec.extend_from_slice(&rest[start_of_trailers..]);
+        start_of_trailers = 0;
+    }
+    let rest = if start_of_trailers > 0 && vec.len() >= start_of_trailers {
+        vec.split_at(start_of_trailers).1
+    } else { vec.as_slice() };
 
+    let mut trailers_result = trailers_from(stream, &rest, trailers_limit);
+    if trailers_result.is_err() {
+        return Err(trailers_result.err().unwrap())
+    }
+    let mut trailers = trailers_result.unwrap();
+
+    if !happy_to_receive_trailers {
+        let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+        headers = headers.add_all(trailers.filter(as_str));
+        trailers = Headers::empty();
+    }
+
+    // should only be doing this if we are talking to a user agent that does not accept chunked encoding
+    // otherwise keep chunked encoding header
+    if is_request && is_version_1_0 {
+        headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
+            .remove("Transfer-Encoding");
+    }
+    Ok((total_bytes_read, headers, trailers))
+}
+
+fn trailers_from(stream: &mut TcpStream, rest: &[u8], trailers_limit: usize) -> Result<Headers, MessageError> {
+    if rest.len() == 0 {
+        return Ok(Headers::empty());
+    }
     let trailer_vec: &mut Vec<u8> = &mut Vec::with_capacity(trailers_limit);
     let result = read_trailers(&rest, trailer_vec, trailers_limit);
     if result.is_err() {
@@ -228,19 +259,7 @@ fn read_chunked_body_and_trailers(
         trailers = new_trailers;
         finished = is_finished;
     }
-
-    if !happy_to_receive_trailers {
-        headers = headers.add_all(trailers);
-        trailers = Headers::empty();
-    }
-
-    // should only be doing this if we are talking to a user agent that does not accept chunked encoding
-    // otherwise keep chunked encoding header
-    if is_request && is_version_1_0 {
-        headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
-            .remove("Transfer-Encoding");
-    }
-    Ok((total_bytes_read, headers, trailers))
+    Ok(trailers)
 }
 
 // todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
@@ -265,6 +284,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
             // ... and know that we are at the end
             let option = (*octet as char).to_digit(10);
             if option.is_none() {
+                //todo() return bad request
                 println!("tried to digitise {}", *octet as char)
             }
             chunk_size = (chunk_size * 10) + option.unwrap() as usize;
@@ -289,6 +309,7 @@ fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to:
                 // if last index, add on the bytes read from current chunk
                 bytes_of_this_chunk_read += bytes_read_from_current_chunk;
                 total_bytes_read += bytes_read_from_current_chunk;
+                start_of_trailers = index + 3;
                 break;
             }
         } else if mode == "read" && on_boundary {
@@ -473,7 +494,7 @@ pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chun
 
 
 pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {
-    let buffer = &mut [0 as u8; 16384];
+    let mut buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);
     let mut first_write = true;
 
@@ -495,7 +516,7 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
             let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
         }
 
-        bytes_read = reader.read(buffer).unwrap_or(0);
+        bytes_read = reader.read(buffer).unwrap();
     }
     // write end byte
     let mut end = vec!(b'0', b'\r', b'\n');

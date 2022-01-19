@@ -18,7 +18,7 @@ mod tests {
         server.test(|| { Ok(PassThroughHandler {}) });
 
         let mut client = WithContentLength::new(
-            Client { base_uri: String::from("127.0.0.1"), port: server.port }
+            Client::new("127.0.0.1", server.port, None)
         );
 
         let methods = vec!(GET, HEAD, OPTIONS, CONNECT, TRACE);

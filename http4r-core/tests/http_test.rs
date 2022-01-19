@@ -22,7 +22,7 @@ mod tests {
     fn client_over_http_get() {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
         let request = Request::get(Uri::parse("/"), Headers::empty());
 
         client.handle(request, |response: Response| {
@@ -38,7 +38,7 @@ mod tests {
 
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
         let post_with_stream_body = Request::post(Uri::parse("/"), Headers::from(vec!(("Content-Length", "20000"))), BodyStream(Box::new(buffer)));
 
         client.handle(post_with_stream_body, |response| {
@@ -59,7 +59,7 @@ mod tests {
     fn can_handle_no_headers() {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
         let no_headers = Request::get(Uri::parse("/"), Headers::empty());
 
         client.handle(no_headers, |response: Response| {
@@ -89,7 +89,7 @@ mod tests {
         //http
         let mut server = Server::new(0);
         server.test(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger {}, WasmClock {}, Router {}), HashMap::new())));
-        let mut client = Client { base_uri: String::from("127.0.0.1"), port: server.port };
+        let mut client = Client::new("127.0.0.1", server.port, None);
         let request = Request::get(Uri::parse("/"), Headers::empty());
 
         client.handle(request, |response: Response| {
