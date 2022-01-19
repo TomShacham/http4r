@@ -44,15 +44,47 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
-pub fn message_from<'a>(first_read: &'a [u8], stream: TcpStream, first_read_bytes: usize, chunks_vec: &'a mut Vec<u8>, start_line_and_headers_limit: usize, trailers_limit: usize) -> Result<HttpMessage<'a>, MessageError> {
-    let result = start_line_and_headers_from(first_read, start_line_and_headers_limit);
+pub fn message_from<'a>(mut stream: TcpStream, mut reader: &'a mut Vec<u8>, chunks_vec: &'a mut Vec<u8>, start_line_limit: usize, headers_limit: usize, trailers_limit: usize) -> Result<HttpMessage<'a>, MessageError> {
+    let bytes_read = stream.read(&mut reader).unwrap();
+    let mut start_line_writer = Vec::with_capacity(start_line_limit);
+    let mut result = start_line_(&reader, &mut start_line_writer, 0);
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (end_of_headers_index, start_line, mut headers) = result.ok().unwrap();
-    let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
+    let (mut finished, mut bytes_read) = result.ok().unwrap();
+    while !finished {
+        let read = stream.read(&mut reader).unwrap();
+        result = start_line_(&reader, &mut start_line_writer, bytes_read);
+        if result.is_err() {
+            return Err(result.err().unwrap());
+        }
+        let (is_finished, read_bytes) = result.ok().unwrap();
+        finished = is_finished;
+        bytes_read = read_bytes;
+    }
+    let start_line = str::from_utf8(start_line_writer.as_slice()).unwrap().split(" ").collect::<Vec<&str>>();
+    let (part1, part2, part3) = (start_line[0].to_string(), start_line[1].to_string(), start_line[2].to_string());
     let is_response = part1.starts_with("HTTP");
-    let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
+    let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&&*part1);
+
+    let mut headers_writer = Vec::with_capacity(headers_limit);
+    result = headers_(&reader[bytes_read..], &mut headers_writer, bytes_read);
+    if result.is_err() {
+        return Err(result.err().unwrap());
+    }
+    let (mut finished, mut bytes_read) = result.ok().unwrap();
+    while !finished {
+        let read = stream.read(&mut reader).unwrap();
+        result = headers_(&reader, &mut start_line_writer, bytes_read);
+        if result.is_err() {
+            return Err(result.err().unwrap());
+        }
+        let (is_finished, read_bytes) = result.ok().unwrap();
+        finished = is_finished;
+        bytes_read = read_bytes;
+    }
+    let header_string = from_utf8(headers_writer.as_slice()).unwrap();
+    let mut headers = Headers::parse_from(header_string);
 
     if let Err(e) = check_valid_content_length_or_transfer_encoding(&headers, is_response, method_can_have_body) {
         return Err(e);
@@ -61,29 +93,30 @@ pub fn message_from<'a>(first_read: &'a [u8], stream: TcpStream, first_read_byte
     if headers.has("Content-Length") && transfer_encoding.is_some() {
         headers = headers.remove("Content-Length");
     }
-    let result = body_from(&first_read, stream.try_clone().unwrap(), first_read_bytes, chunks_vec, start_line_and_headers_limit, end_of_headers_index, &headers, part3, !is_response, method_can_have_body, headers.content_length_header(), transfer_encoding, trailers_limit);
+    let is_version_1_0 = part3 == "HTTP/1.0";
+    let result = body_from(&reader[bytes_read..], stream.try_clone().unwrap(), chunks_vec, bytes_read, &headers, is_version_1_0, !is_response, method_can_have_body, headers.content_length_header(), transfer_encoding, trailers_limit);
     if result.is_err() {
         return Err(result.err().unwrap());
     }
     let (body, headers, trailers) = result.unwrap();
 
-    message(part1, part2, part3, is_response, body, headers, trailers)
+    message(part1.to_string(), part2.to_string(), part3.clone().to_string(), is_response, body, headers, trailers)
 }
 
-fn message<'a>(part1: &'a str, part2: &'a str, part3: &'a str, is_response: bool, body: Body<'a>, headers: Headers, trailers: Headers) -> Result<HttpMessage<'a>, MessageError> {
+fn message<'a>(part1: String, part2: String, part3: String, is_response: bool, body: Body<'a>, headers: Headers, trailers: Headers) -> Result<HttpMessage<'a>, MessageError> {
     if is_response {
-        let (major, minor) = http_version_from(part1);
+        let (major, minor) = http_version_from(part1.as_str());
         Ok(HttpMessage::Response(Response {
-            status: Status::from(part2),
+            status: Status::from(part2.as_str()),
             headers,
             body,
             version: HttpVersion { major, minor },
             trailers,
         }))
     } else {
-        let (major, minor) = http_version_from(part3);
+        let (major, minor) = http_version_from(part3.as_str());
         Ok(HttpMessage::Request(Request {
-            method: Method::from(part1),
+            method: Method::from(part1.as_str()),
             uri: Uri::parse(part2),
             headers,
             body,
@@ -94,14 +127,12 @@ fn message<'a>(part1: &'a str, part2: &'a str, part3: &'a str, is_response: bool
 }
 
 fn body_from<'a>(
-    first_read: &'a [u8],
+    buffer: &'a [u8],
     mut stream: TcpStream,
-    first_read_bytes: usize,
     chunks_vec: &'a mut Vec<u8>,
-    start_line_and_headers_limit: usize,
     end_of_headers_index: usize,
-    headers: &Headers,
-    part3: &'a str,
+    existing_headers: &Headers,
+    is_version_1_0: bool,
     is_request: bool,
     method_can_have_body: bool,
     content_length: Option<Result<usize, String>>,
@@ -109,17 +140,80 @@ fn body_from<'a>(
     trailers_limit: usize) -> Result<(Body<'a>, Headers, Headers), MessageError> {
     let body;
     let mut trailers = Headers::empty();
-    let mut headers = Headers::from_headers(headers);
+    let mut headers = Headers::from_headers(existing_headers);
+    let expected_trailers = headers.get("Trailer");
+    let happy_to_receive_trailers = headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
+    let cleansed_trailers = expected_trailers
+        .map(|ts| ts.split(", ")
+            .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
+            .map(|t| t.to_string())
+            .collect::<Vec<String>>())
+        .unwrap_or(vec!());
+
 
     if let Some(_encoding) = transfer_encoding {
-        let is_version_1_0 = part3 == "HTTP/1.0";
-        let result = read_chunked_body_and_trailers(&first_read, &mut stream, first_read_bytes, chunks_vec, start_line_and_headers_limit, end_of_headers_index, &headers, is_request, is_version_1_0, trailers_limit);
+        let result = body_chunks_(buffer, chunks_vec, "metadata", 0, 0);
         if result.is_err() {
             return Err(result.err().unwrap());
         }
-        let (total_bytes_read, new_headers, new_trailers) = result.unwrap();
-        trailers = new_trailers;
-        headers = new_headers;
+        let (mut finished, mut mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, mut start_of_trailers) = result.unwrap();
+
+        let mut vec = Vec::with_capacity(16384);
+        while !finished {
+            let result = stream.read(&mut vec);
+            if result.is_err() { continue; };
+            if result.unwrap() == 0 {
+                break;
+            }
+
+            let result = body_chunks_(&vec, chunks_vec, mode.to_string().as_str(), read_of_current_chunk, chunk_size);
+            if result.is_err() {
+                return Err(result.err().unwrap());
+            }
+            let (is_finished, current_mode, bytes_read, up_to_in_chunk, current_chunk_size, trailers_start_at) = result.unwrap();
+
+            mode = current_mode;
+            total_bytes_read += bytes_read;
+            read_of_current_chunk = up_to_in_chunk;
+            chunk_size = current_chunk_size;
+            start_of_trailers = trailers_start_at;
+            finished = is_finished;
+        }
+
+        let mut trailers = Headers::empty();
+        let more_bytes_to_read_after_body = vec.len() > total_bytes_read;
+        if more_bytes_to_read_after_body {
+            let trailer_vec: &mut Vec<u8> = &mut Vec::with_capacity(trailers_limit);
+            let result = trailers_(&vec[total_bytes_read..], trailer_vec, trailers_limit);
+            if result.is_err() {
+                return Err(result.err().unwrap());
+            }
+            let (mut finished, mut trailers) = result.unwrap();
+            while !finished {
+                let mut buffer = [0; 16384];
+                let result = stream.read(&mut buffer);
+                if result.is_err() { continue; };
+                let result = trailers_(&buffer, trailer_vec, trailers_limit);
+                if result.is_err() {
+                    return Err(result.err().unwrap());
+                }
+                let (is_finished, new_trailers) = result.unwrap();
+                trailers = new_trailers;
+                finished = is_finished;
+            }
+        }
+
+        if !happy_to_receive_trailers {
+            let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+            headers = headers.add_all(trailers.filter(as_str));
+            trailers = Headers::empty();
+        }
+        // should only be doing this if we are talking to a user agent that does not accept chunked encoding
+        // otherwise keep chunked encoding header
+        if is_request && is_version_1_0 {
+            headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
+                .remove("Transfer-Encoding");
+        }
         body = BodyStream(Box::new(chunks_vec.take(total_bytes_read as u64)));
     } else {
         match content_length {
@@ -128,17 +222,15 @@ fn body_from<'a>(
                 body = Body::empty()
             }
             // we have read the whole body in the first read
-            Some(Ok(content_length)) if first_read_bytes > end_of_headers_index
-                && (first_read_bytes - end_of_headers_index) == content_length => {
-                let result = str::from_utf8(&first_read[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
+            Some(Ok(content_length)) if buffer.len() == content_length => {
+                let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
                 body = Body::BodyString(result)
             }
             Some(Ok(content_length)) => {
-                if first_read_bytes > end_of_headers_index {
-                    let body_so_far = &first_read[end_of_headers_index..first_read_bytes];
-                    let body_so_far_size = first_read_bytes - end_of_headers_index;
-                    let rest = stream.take(content_length as u64 - body_so_far_size as u64);
-                    body = Body::BodyStream(Box::new(body_so_far.chain(rest)));
+                // we need to read more to get the body
+                if content_length > buffer.len() {
+                    let rest = stream.take(content_length as u64 - buffer.len() as u64);
+                    body = Body::BodyStream(Box::new(buffer.chain(rest)));
                 } else {
                     let body_stream = stream.take(content_length as u64);
                     body = Body::BodyStream(Box::new(body_stream));
@@ -153,117 +245,8 @@ fn body_from<'a>(
     Ok((body, headers, trailers))
 }
 
-fn read_chunked_body_and_trailers(
-    first_read: &[u8],
-    stream: &mut TcpStream,
-    first_read_bytes: usize,
-    chunks_vec: &mut Vec<u8>,
-    start_line_and_headers_limit: usize,
-    end_of_headers_index: usize,
-    existing_headers: &Headers,
-    is_request: bool,
-    is_version_1_0: bool,
-    trailers_limit: usize,
-) -> Result<(usize, Headers, Headers), MessageError> {
-    let expected_trailers = existing_headers.get("Trailer");
-    let happy_to_receive_trailers = existing_headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
-    let cleansed_trailers = expected_trailers
-        .map(|ts| ts.split(", ")
-            .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>())
-        .unwrap_or(vec!());
-    let rest = &first_read[end_of_headers_index..first_read_bytes];
-
-    let result = read_chunks(rest, chunks_vec, "metadata", 0, 0, start_line_and_headers_limit);
-    if result.is_err() {
-        return Err(result.err().unwrap());
-    }
-    let (mut finished, mut in_mode, mut total_bytes_read, mut read_of_current_chunk, mut chunk_size, mut start_of_trailers) = result.unwrap();
-    let mut headers = Headers::from_headers(existing_headers);
-
-    let mut vec = Vec::with_capacity(16384);
-    while !finished {
-        let result = stream.read(&mut vec);
-        if result.is_err() { continue; };
-        if result.unwrap() == 0 {
-            break;
-        }
-
-        let result = read_chunks(&vec, chunks_vec, in_mode.as_str(), read_of_current_chunk, chunk_size, start_line_and_headers_limit);
-        if result.is_err() {
-            return Err(result.err().unwrap());
-        }
-
-        let (is_finished, current_mode, bytes_read, up_to_in_chunk, current_chunk_size, trailers_start_at) = result.unwrap();
-        println!("bytes read {}", bytes_read);
-
-        in_mode = current_mode;
-        total_bytes_read += bytes_read;
-        read_of_current_chunk = up_to_in_chunk;
-        chunk_size = current_chunk_size;
-        start_of_trailers = trailers_start_at;
-        finished = is_finished;
-    }
-
-    // if start_of_trailers is equal to rest.len() then there were no more bytes after the body in the last read
-    // but if it is less than rest.len() then we have some trailers to read
-    if finished && start_of_trailers < rest.len() {
-        vec.extend_from_slice(&rest[start_of_trailers..]);
-        start_of_trailers = 0;
-    }
-    let rest = if start_of_trailers > 0 && vec.len() >= start_of_trailers {
-        vec.split_at(start_of_trailers).1
-    } else { vec.as_slice() };
-
-    let mut trailers_result = trailers_from(stream, &rest, trailers_limit);
-    if trailers_result.is_err() {
-        return Err(trailers_result.err().unwrap())
-    }
-    let mut trailers = trailers_result.unwrap();
-
-    if !happy_to_receive_trailers {
-        let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
-        headers = headers.add_all(trailers.filter(as_str));
-        trailers = Headers::empty();
-    }
-
-    // should only be doing this if we are talking to a user agent that does not accept chunked encoding
-    // otherwise keep chunked encoding header
-    if is_request && is_version_1_0 {
-        headers = headers.add(("Content-Length", total_bytes_read.to_string().as_str()))
-            .remove("Transfer-Encoding");
-    }
-    Ok((total_bytes_read, headers, trailers))
-}
-
-fn trailers_from(stream: &mut TcpStream, rest: &[u8], trailers_limit: usize) -> Result<Headers, MessageError> {
-    if rest.len() == 0 {
-        return Ok(Headers::empty());
-    }
-    let trailer_vec: &mut Vec<u8> = &mut Vec::with_capacity(trailers_limit);
-    let result = read_trailers(&rest, trailer_vec, trailers_limit);
-    if result.is_err() {
-        return Err(result.err().unwrap());
-    }
-    let (mut finished, mut trailers) = result.unwrap();
-    while !finished {
-        let mut buffer = [0; 16384];
-        let result = stream.read(&mut buffer);
-        if result.is_err() { continue; };
-        let result = read_trailers(&buffer, trailer_vec, trailers_limit);
-        if result.is_err() {
-            return Err(result.err().unwrap());
-        }
-        let (is_finished, new_trailers) = result.unwrap();
-        trailers = new_trailers;
-        finished = is_finished;
-    }
-    Ok(trailers)
-}
-
 // todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
-fn read_chunks(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize, limit: usize) -> Result<(bool, String, usize, usize, usize, usize), MessageError> {
+fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize) -> Result<(bool, String, usize, usize, usize, usize), MessageError> {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
@@ -341,7 +324,54 @@ fn check_valid_content_length_or_transfer_encoding(headers: &Headers, is_respons
     Ok(())
 }
 
-fn read_trailers(buffer: &[u8], writer: &mut Vec<u8>, limit: usize) -> Result<(bool, Headers), MessageError> {
+fn start_line_(reader: &[u8], mut writer: &mut Vec<u8>, already_read: usize) -> Result<(bool, usize), MessageError> {
+    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
+    let mut end = reader.len() - 1;
+    let mut finished = false;
+
+    for (index, octet) in reader.iter().enumerate() {
+        writer.push(*octet);
+        if prev[3] == '\r' && *octet == b'\n' {
+            finished = true;
+            end = index + 1;
+        }
+        if already_read + index > writer.capacity() {
+            return Err(MessageError::StartLineTooBig(format!("Start line must be less than {}", reader.len())));
+        }
+        prev.remove(0);
+        prev.push(*octet as char);
+    }
+
+    Ok((finished, end))
+}
+
+fn headers_(reader: &[u8], mut writer: &mut Vec<u8>, already_read: usize) -> Result<(bool, usize), MessageError> {
+    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
+    let mut end = reader.len() - 1;
+    let mut finished = false;
+
+    for (index, octet) in reader.iter().enumerate() {
+        if *octet != b'\r' && *octet != b'\n' {
+            writer.push(*octet);
+        }
+        if prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
+            end = index - 3; // end is behind the \r\n\r\n chars (ie back 4)
+            finished = true;
+            break;
+        } else {
+            end = index + 1;
+        }
+        if already_read + index > writer.capacity() {
+            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", writer.capacity())));
+        }
+        prev.remove(0);
+        prev.push(*octet as char);
+    }
+
+    Ok((finished, end))
+}
+
+fn trailers_(buffer: &[u8], writer: &mut Vec<u8>, limit: usize) -> Result<(bool, Headers), MessageError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut finished = false;
 
@@ -351,7 +381,6 @@ fn read_trailers(buffer: &[u8], writer: &mut Vec<u8>, limit: usize) -> Result<(b
             break;
         }
         if writer.len() > limit {
-            // todo() do one more read??? or allow user to set a limit on headers/trailers?
             return Err(MessageError::HeadersTooBig(format!("Trailers must be less than {}", buffer.len())));
         }
         prev.remove(0);
@@ -366,48 +395,6 @@ fn read_trailers(buffer: &[u8], writer: &mut Vec<u8>, limit: usize) -> Result<(b
         headers = Headers::parse_from(header_string);
     }
     Ok((finished, headers))
-}
-
-fn start_line_and_headers_from(buffer: &[u8], limit: usize) -> Result<(usize, Vec<&str>, Headers), MessageError> {
-    let mut prev: Vec<char> = vec!('1', '2', '3', '4');
-    let mut end_of_headers_index = 0;
-    let mut end_of_start_line = 0;
-    let mut first_line = None;
-    let mut headers = None;
-    let mut finished = false;
-
-    for (index, octet) in buffer.iter().enumerate() {
-        if first_line.is_none() && prev[3] == '\r' && *octet == b'\n' {
-            first_line = Some(&buffer[..index - 1]);
-            end_of_start_line = index + 1;
-        }
-        if !first_line.is_none() && prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
-            let end_of_headers = index - 3; // end is behind the \r\n\r\n chars (ie back 4)
-            if end_of_start_line > end_of_headers {
-                headers = None
-            } else {
-                headers = Some(&buffer[end_of_start_line..end_of_headers]);
-            }
-            finished = true;
-            end_of_headers_index = index + 1;
-            break;
-        }
-        if index > limit {
-            // todo() do one more read??? or allow user to set a limit on headers/trailers?
-            return Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", buffer.len())));
-        }
-
-        prev.remove(0);
-        prev.push(*octet as char);
-    }
-    let header_string = if headers.is_none() { "" } else {
-        str::from_utf8(&headers.unwrap()).unwrap()
-    };
-
-    let headers = Headers::parse_from(header_string);
-    let start_line = str::from_utf8(&first_line.unwrap()).unwrap().split(" ").collect::<Vec<&str>>();
-
-    Ok((end_of_headers_index, start_line, headers))
 }
 
 pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
@@ -548,6 +535,7 @@ fn http_version_from(str: &str) -> (u8, u8) {
 pub enum MessageError {
     InvalidContentLength(String),
     NoContentLengthOrTransferEncoding(String),
+    StartLineTooBig(String),
     HeadersTooBig(String),
 }
 

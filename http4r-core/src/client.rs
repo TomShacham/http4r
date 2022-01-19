@@ -1,4 +1,3 @@
-use std::io::{Read};
 use std::net::TcpStream;
 
 use crate::handler::Handler;
@@ -28,15 +27,13 @@ impl Handler for Client {
 
         write_body(&mut stream, HttpMessage::Request(req));
 
+        let mut reader = Vec::with_capacity(4096);
         let mut chunks_vec = Vec::with_capacity(1048576);
-        let mut first_read = [0; 16384];
-        let first_read_bytes = stream.try_clone().unwrap().read(&mut first_read).unwrap();
-
-        let result = message_from(&mut first_read, stream.try_clone().unwrap(), first_read_bytes, &mut chunks_vec, self.options.headers_size, self.options.trailers_size);
+        let result = message_from( stream.try_clone().unwrap(), &mut reader, &mut chunks_vec, 16384, 16384, 16384);
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,
-            Err(e) => Response::bad_request(Headers::empty(), BodyString("An error occurred")),
+            Err(_) => Response::bad_request(Headers::empty(), BodyString("An error occurred")),
             _ => Response::bad_request(Headers::empty(), BodyString("will happen if server replies with invalid response"))
         };
 

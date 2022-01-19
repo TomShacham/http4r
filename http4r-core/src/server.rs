@@ -1,6 +1,6 @@
 use std::net::{TcpListener, TcpStream};
 use std::thread;
-use std::io::{Read, Write};
+use std::io::{Write};
 use std::sync::Arc;
 use crate::handler::Handler;
 use crate::headers::Headers;
@@ -67,13 +67,15 @@ impl Server where {
 
     fn handle_request<F, H>(handler: Arc<F>, mut stream: TcpStream)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
-        let first_read = &mut [0 as u8; 16384];
+        let mut reader = Vec::with_capacity(4096);
         let mut chunks_vec = Vec::with_capacity(1048576);
-        let first_read_bytes = stream.read(first_read).unwrap();
-        let result = message_from(first_read, stream.try_clone().unwrap(), first_read_bytes, &mut chunks_vec, 16384, 16384);
+        let result = message_from(stream.try_clone().unwrap(), &mut reader, &mut chunks_vec, 16384, 16384, 16384);
 
         match result {
-            Err(MessageError::HeadersTooBig(msg)) | Err(MessageError::InvalidContentLength(msg)) => {
+            Err(MessageError::HeadersTooBig(msg))
+            | Err(MessageError::InvalidContentLength(msg))
+            | Err(MessageError::StartLineTooBig(msg))
+            => {
                 let response = Response::bad_request(Headers::empty(), BodyString(msg.as_str()));
                 write_body(&mut stream, HttpMessage::Response(response));
             }
