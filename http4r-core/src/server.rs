@@ -67,12 +67,24 @@ impl Server where {
 
     fn handle_request<F, H>(handler: Arc<F>, mut stream: TcpStream)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
-        let mut reader = Vec::with_capacity(4096);
+        let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_vec = Vec::with_capacity(1048576);
-        let result = message_from(stream.try_clone().unwrap(), &mut reader, &mut chunks_vec, 16384, 16384, 16384);
+        let mut start_line_writer = Vec::with_capacity(16384);
+        let mut headers_writer = Vec::with_capacity(16384);
+        let mut trailers_writer = Vec::with_capacity(16384);
+
+        let result = message_from(
+            stream.try_clone().unwrap(),
+            &mut reader,
+            &mut chunks_vec,
+            &mut start_line_writer,
+            &mut headers_writer,
+            &mut trailers_writer,
+        );
 
         match result {
             Err(MessageError::HeadersTooBig(msg))
+            | Err(MessageError::TrailersTooBig(msg))
             | Err(MessageError::InvalidContentLength(msg))
             | Err(MessageError::StartLineTooBig(msg))
             => {

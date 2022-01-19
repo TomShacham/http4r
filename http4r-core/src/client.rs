@@ -27,9 +27,12 @@ impl Handler for Client {
 
         write_body(&mut stream, HttpMessage::Request(req));
 
-        let mut reader = Vec::with_capacity(4096);
+        let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_vec = Vec::with_capacity(1048576);
-        let result = message_from( stream.try_clone().unwrap(), &mut reader, &mut chunks_vec, 16384, 16384, 16384);
+        let mut start_line_writer = Vec::with_capacity(16384);
+        let mut headers_writer = Vec::with_capacity(16384);
+        let mut trailers_writer = Vec::with_capacity(16384);
+        let result = message_from(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut trailers_writer, &mut chunks_vec);
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,
