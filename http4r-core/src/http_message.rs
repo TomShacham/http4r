@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::io::{copy, Read, Write};
+use core::iter::Take;
 use std::net::TcpStream;
 use std::str;
 use std::str::from_utf8;
@@ -53,14 +54,14 @@ pub fn message_from<'a>(
     chunks_vec: &'a mut Vec<u8>,
 ) -> Result<HttpMessage<'a>, MessageError> {
     let mut read_bytes_from_stream = stream.read(&mut reader).unwrap();
-    let mut result = start_line_(&reader, &mut start_line_writer, 0);
+    let mut result = start_line_(&reader, &mut start_line_writer);
     if result.is_err() {
         return Err(result.err().unwrap());
     }
     let (mut finished, mut up_to_in_reader) = result.ok().unwrap();
     while !finished {
         read_bytes_from_stream = stream.read(&mut reader).unwrap();
-        result = start_line_(&reader, &mut start_line_writer, up_to_in_reader);
+        result = start_line_(&reader, &mut start_line_writer);
         if result.is_err() {
             return Err(result.err().unwrap());
         }
@@ -105,7 +106,6 @@ pub fn message_from<'a>(
         stream.try_clone().unwrap(),
         chunks_vec,
         trailers_writer,
-        up_to_in_reader,
         &headers,
         is_version_1_0,
         !is_response,
@@ -149,7 +149,6 @@ fn body_from<'a>(
     mut stream: TcpStream,
     chunks_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
-    end_of_headers_index: usize,
     existing_headers: &Headers,
     is_version_1_0: bool,
     is_request: bool,
@@ -341,7 +340,7 @@ fn check_valid_content_length_or_transfer_encoding(headers: &Headers, is_respons
     Ok(())
 }
 
-fn start_line_(reader: &[u8], mut writer: &mut Vec<u8>, already_read: usize) -> Result<(bool, usize), MessageError> {
+fn start_line_(reader: &[u8], mut writer: &mut Vec<u8>) -> Result<(bool, usize), MessageError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut end = if reader.len() > 0 { reader.len() - 1 } else { 0 };
     let mut finished = false;
@@ -355,7 +354,7 @@ fn start_line_(reader: &[u8], mut writer: &mut Vec<u8>, already_read: usize) -> 
             end = index + 1;
             break;
         }
-        if already_read + index > writer.capacity() {
+        if writer.len() == writer.capacity() {
             return Err(MessageError::StartLineTooBig(format!("Start line must be less than {}", reader.len())));
         }
         prev.remove(0);

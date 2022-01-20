@@ -28,6 +28,7 @@
     - read and write to database
 ---
 - core api
+  - limits on headers and body etc tests 
   - if version is known to be 1.0 then do not send chunked message
     - stream into memory and forward as content-length 
   - multipart form data
