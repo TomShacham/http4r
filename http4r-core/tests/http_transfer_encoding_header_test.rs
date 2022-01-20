@@ -210,32 +210,32 @@ When a chunked message containing a non-empty trailer is received,
         let mut client = Client::new("127.0.0.1", server.port, None);
 
         let body = "hello";
-        let do_not_want_trailers = Request::post(
-            Uri::parse("/bob"),
-            Headers::from(vec!(
-                ("Transfer-Encoding", "chunked"),
-                ("Trailer", "Expires"),
-                // => no TE header
-            )),
-            BodyString(body),
-        ).with_trailers(Headers::from(vec!(
-            ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT"),
-        )));
-
-        client.handle(do_not_want_trailers, |response: Response| {
-            assert_eq!(OK, response.status);
-            assert_eq!(body, body_string(response.body));
-            assert_eq!(vec!(
-                //Expires is in headers not trailers now
-                ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
-                ("Transfer-Encoding".to_string(), "chunked".to_string()),
-                ("Trailer".to_string(), "Expires".to_string()),
-            ), response.headers.vec);
-            let vec1: Vec<HeaderType> = vec!(
-                // => no Expires trailer in trailers
-            );
-            assert_eq!(vec1, response.trailers.vec);
-        });
+        // let do_not_want_trailers = Request::post(
+        //     Uri::parse("/bob"),
+        //     Headers::from(vec!(
+        //         ("Transfer-Encoding", "chunked"),
+        //         ("Trailer", "Expires"),
+        //         // => no TE header
+        //     )),
+        //     BodyString(body),
+        // ).with_trailers(Headers::from(vec!(
+        //     ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT"),
+        // )));
+        //
+        // client.handle(do_not_want_trailers, |response: Response| {
+        //     assert_eq!(OK, response.status);
+        //     assert_eq!(body, body_string(response.body));
+        //     assert_eq!(vec!(
+        //         //Expires is in headers not trailers now
+        //         ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
+        //         ("Transfer-Encoding".to_string(), "chunked".to_string()),
+        //         ("Trailer".to_string(), "Expires".to_string()),
+        //     ), response.headers.vec);
+        //     let vec1: Vec<HeaderType> = vec!(
+        //         // => no Expires trailer in trailers
+        //     );
+        //     assert_eq!(vec1, response.trailers.vec);
+        // });
 
         let asks_for_trailers = Request::post(
             Uri::parse("/bob"),

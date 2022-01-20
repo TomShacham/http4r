@@ -52,42 +52,42 @@ pub fn message_from<'a>(
     mut trailers_writer: &'a mut Vec<u8>,
     chunks_vec: &'a mut Vec<u8>,
 ) -> Result<HttpMessage<'a>, MessageError> {
-    let _read = stream.read(&mut reader).unwrap();
+    let mut read_bytes_from_stream = stream.read(&mut reader).unwrap();
     let mut result = start_line_(&reader, &mut start_line_writer, 0);
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (mut finished, mut bytes_read) = result.ok().unwrap();
+    let (mut finished, mut up_to_in_reader) = result.ok().unwrap();
     while !finished {
-        let _read = stream.read(&mut reader).unwrap();
-        result = start_line_(&reader, &mut start_line_writer, bytes_read);
+        read_bytes_from_stream = stream.read(&mut reader).unwrap();
+        result = start_line_(&reader, &mut start_line_writer, up_to_in_reader);
         if result.is_err() {
             return Err(result.err().unwrap());
         }
         let (is_finished, read_bytes) = result.ok().unwrap();
         finished = is_finished;
-        bytes_read = read_bytes;
+        up_to_in_reader = read_bytes;
     }
     let start_line = str::from_utf8(start_line_writer).unwrap().split(" ").collect::<Vec<&str>>();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
-    result = headers_(&reader[bytes_read..], &mut headers_writer, bytes_read);
+    result = headers_(&reader[up_to_in_reader..], &mut headers_writer, up_to_in_reader);
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (mut finished, read_bytes) = result.ok().unwrap();
-    bytes_read += read_bytes;
+    let (mut finished, just_read) = result.ok().unwrap();
+    up_to_in_reader += just_read;
     while !finished {
-        let _read = stream.read(&mut reader).unwrap();
-        result = headers_(&reader, &mut headers_writer, bytes_read);
+        read_bytes_from_stream = stream.read(&mut reader).unwrap();
+        result = headers_(&reader, &mut headers_writer, up_to_in_reader);
         if result.is_err() {
             return Err(result.err().unwrap());
         }
-        let (is_finished, read_bytes) = result.ok().unwrap();
+        let (is_finished, just_read) = result.ok().unwrap();
         finished = is_finished;
-        bytes_read = read_bytes;
+        up_to_in_reader = just_read;
     }
     let header_string = from_utf8(headers_writer.as_slice()).unwrap();
     let mut headers = Headers::parse_from(header_string);
@@ -101,11 +101,11 @@ pub fn message_from<'a>(
     }
     let is_version_1_0 = part3 == "HTTP/1.0";
     let result = body_from(
-        &reader[bytes_read..],
+        &mut reader[up_to_in_reader..read_bytes_from_stream],
         stream.try_clone().unwrap(),
         chunks_vec,
         trailers_writer,
-        bytes_read,
+        up_to_in_reader,
         &headers,
         is_version_1_0,
         !is_response,
@@ -145,10 +145,10 @@ fn message<'a>(part1: String, part2: &'a str, part3: String, is_response: bool, 
 }
 
 fn body_from<'a>(
-    buffer: &'a [u8],
+    mut buffer: &'a mut [u8],
     mut stream: TcpStream,
-    mut chunks_writer: &'a mut Vec<u8>,
-    mut trailers_writer: &'a mut Vec<u8>,
+    chunks_writer: &'a mut Vec<u8>,
+    trailers_writer: &'a mut Vec<u8>,
     end_of_headers_index: usize,
     existing_headers: &Headers,
     is_version_1_0: bool,
@@ -176,18 +176,15 @@ fn body_from<'a>(
         }
         let (mut finished, mut mode, mut chunked_body_bytes_read, mut read_of_current_chunk, mut chunk_size, mut start_of_trailers) = result.unwrap();
 
-        let mut reader: &mut [u8] = &mut [0; 4096];
-        let mut bytes_read = 0;
         while !finished {
-            let result = stream.read(&mut reader);
+            let result = stream.read(&mut buffer);
             if result.is_err() { continue; };
             let read = result.unwrap();
             if read == 0 {
                 break;
             }
-            bytes_read = read;
 
-            let result = body_chunks_(&reader, chunks_writer, mode.to_string().as_str(), read_of_current_chunk, chunk_size);
+            let result = body_chunks_(&buffer, chunks_writer, mode.to_string().as_str(), read_of_current_chunk, chunk_size);
             if result.is_err() {
                 return Err(result.err().unwrap());
             }
@@ -201,18 +198,17 @@ fn body_from<'a>(
             finished = is_finished;
         }
 
-        let mut trailers = Headers::empty();
-        let more_bytes_to_read_after_body = bytes_read > chunked_body_bytes_read;
+        let more_bytes_to_read_after_body = start_of_trailers < buffer.len() ;
         if more_bytes_to_read_after_body {
-            let result = trailers_(&reader[chunked_body_bytes_read..], trailers_writer);
+            let result = trailers_(&buffer[start_of_trailers..], trailers_writer);
             if result.is_err() {
                 return Err(result.err().unwrap());
             }
-            let (mut finished, mut trailers) = result.unwrap();
+            let (mut finished, mut new_trailers) = result.unwrap();
+            trailers = new_trailers;
             while !finished {
-                let mut buffer = [0; 16384];
-                let result = stream.read(&mut buffer);
-                if result.is_err() { continue; };
+                let mut buffer = [0; 4096];
+                let result = stream.read(&mut buffer).unwrap();
                 let result = trailers_(&buffer, trailers_writer);
                 if result.is_err() {
                     return Err(result.err().unwrap());
@@ -266,9 +262,8 @@ fn body_from<'a>(
 }
 
 // todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
-fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, last_mode: &str, read_up_to: usize, this_chunk_size: usize) -> Result<(bool, String, usize, usize, usize, usize), MessageError> {
+fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: &str, read_up_to: usize, this_chunk_size: usize) -> Result<(bool, String, usize, usize, usize, usize), MessageError> {
     let mut prev = vec!('1', '2', '3', '4', '5');
-    let mut mode = last_mode;
     let mut chunk_size: usize = this_chunk_size;
     let mut bytes_of_this_chunk_read = read_up_to;
     let mut finished = false;
@@ -374,12 +369,11 @@ fn headers_(reader: &[u8], mut writer: &mut Vec<u8>, already_read: usize) -> Res
     let mut finished = false;
 
     for (index, octet) in reader.iter().enumerate() {
-        if *octet != b'\r' && *octet != b'\n' {
-            writer.push(*octet);
-        }
+        writer.push(*octet);
         if prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
             end = index + 1;
             finished = true;
+            writer.pop();writer.pop();writer.pop();writer.pop(); // get rid of previous \r\n\r\n
             break;
         } else {
             end = index + 1;
@@ -397,6 +391,10 @@ fn headers_(reader: &[u8], mut writer: &mut Vec<u8>, already_read: usize) -> Res
 fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> Result<(bool, Headers), MessageError> {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut finished = false;
+
+    if buffer.len() == 0 {
+        return Ok((true, Headers::empty()));
+    }
 
     for (index, octet) in buffer.iter().enumerate() {
         if prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
@@ -502,7 +500,11 @@ pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chun
     stream.write(first_line.as_bytes()).unwrap();
 }
 
-
+/*
+https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
+It is not an error if the returned value n is smaller than the buffer size, even when the reader is not at the end of the stream yet.
+This may happen for example because fewer bytes are actually available right now (e. g. being close to end-of-file) or because read() was interrupted by a signal.
+ */
 pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {
     let mut buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);
