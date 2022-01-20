@@ -176,6 +176,7 @@ fn body_from<'a>(
         }
         let (mut finished, mut mode, mut chunked_body_bytes_read, mut read_of_current_chunk, mut chunk_size, mut start_of_trailers) = result.unwrap();
 
+        let mut last_read_bytes = buffer.len();
         while !finished {
             let result = stream.read(&mut buffer);
             if result.is_err() { continue; };
@@ -183,6 +184,7 @@ fn body_from<'a>(
             if read == 0 {
                 break;
             }
+            last_read_bytes = read;
 
             let result = body_chunks_(&buffer, chunks_writer, mode.to_string().as_str(), read_of_current_chunk, chunk_size);
             if result.is_err() {
@@ -198,7 +200,7 @@ fn body_from<'a>(
             finished = is_finished;
         }
 
-        let more_bytes_to_read_after_body = start_of_trailers < buffer.len() ;
+        let more_bytes_to_read_after_body = start_of_trailers < last_read_bytes;
         if more_bytes_to_read_after_body {
             let result = trailers_(&buffer[start_of_trailers..], trailers_writer);
             if result.is_err() {
@@ -239,7 +241,7 @@ fn body_from<'a>(
             }
             // we have read the whole body in the first read
             Some(Ok(content_length)) if buffer.len() == content_length => {
-                let result = str::from_utf8(&buffer[end_of_headers_index..(content_length + end_of_headers_index)]).unwrap();
+                let result = str::from_utf8(&buffer[..]).unwrap();
                 body = Body::BodyString(result)
             }
             Some(Ok(content_length)) => {
@@ -401,8 +403,8 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> Result<(bool, Headers), Mes
             finished = true;
             break;
         }
-        if index > writer.capacity() {
-            return Err(MessageError::TrailersTooBig(format!("Trailers must be less than {}", buffer.len())));
+        if writer.len() == writer.capacity() {
+            return Err(MessageError::TrailersTooBig(format!("Trailers must be less than {}", writer.capacity())));
         }
         prev.remove(0);
         prev.push(*octet as char);
@@ -565,9 +567,15 @@ pub enum MessageError {
     TrailersTooBig(String),
 }
 
-impl Display for MessageError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+impl MessageError {
+    pub fn to_string(&self) -> String {
+        match &self {
+            MessageError::InvalidContentLength(_) => "Invalid content length".to_string(),
+            MessageError::NoContentLengthOrTransferEncoding(_) => "No content length or transfer encoding".to_string(),
+            MessageError::StartLineTooBig(_) => "Start line too big".to_string(),
+            MessageError::HeadersTooBig(_) => "Headers too big".to_string(),
+            MessageError::TrailersTooBig(_) => "Trailers too big".to_string(),
+        }
     }
 }
 

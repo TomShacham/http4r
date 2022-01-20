@@ -15,6 +15,7 @@ impl Client {
                 headers_size: 16384,
                 trailers_size: 16384,
             }),
+            err: "".to_string()
         }
     }
 }
@@ -36,7 +37,10 @@ impl Handler for Client {
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,
-            Err(_) => Response::bad_request(Headers::empty(), BodyString("An error occurred")),
+            Err(e) => {
+                self.err = e.to_string();
+                Response::bad_request(Headers::empty(), BodyString(self.err.as_str()))
+            },
             _ => Response::bad_request(Headers::empty(), BodyString("will happen if server replies with invalid response"))
         };
 
@@ -48,6 +52,7 @@ pub struct Client {
     pub base_uri: String,
     pub port: u16,
     options: ClientOptions,
+    pub err: String,
 }
 
 pub struct ClientOptions {

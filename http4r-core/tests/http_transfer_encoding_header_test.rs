@@ -37,8 +37,8 @@ mod tests {
             BodyString(little_string));
 
         client.handle(big_chunked_request, |response: Response| {
-            assert_eq!(OK, response.status);
             assert_eq!(little_string, body_string(response.body));
+            assert_eq!(OK, response.status);
             assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
         });
     }
