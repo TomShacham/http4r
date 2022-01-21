@@ -311,14 +311,8 @@ fn body_from<'a>(
             Some(Ok(content_length)) => {
                 // we need to read more to get the body
                 //todo() do we need this if else? arent they the same
-                if content_length > bytes_left_in_reader {
-                    let rest = stream.take((content_length - bytes_left_in_reader) as u64);
-                    body = Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)));
-                } else {
-                    let body_stream = stream.take(content_length as u64);
-                    body = Body::BodyStream(Box::new(body_stream));
-                }
-            }
+                let rest = stream.take((content_length - bytes_left_in_reader) as u64);
+                body = Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)));            }
             Some(Err(error)) => {
                 return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
             }
