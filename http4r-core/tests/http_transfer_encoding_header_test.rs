@@ -359,6 +359,8 @@ When a chunked message containing a non-empty trailer is received,
         });
     }
 
+    //test bad request if invalid boundary digit
+
     //test that we read the body into non chunked encoding if it's http 1.0
 
     //test body stream writes chunks correctly

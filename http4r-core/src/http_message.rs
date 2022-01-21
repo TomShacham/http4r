@@ -150,12 +150,13 @@ fn read(
     let mut result = ReadResult::Err(MessageError::HeadersTooBig("".to_string()));
     while !finished {
         if up_to_in_reader > 0 {
-            result = fun(&mut reader[up_to_in_reader..], writer);
+            result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
-            // as we are in the same reader (didn't need to call stream.read to finish parsing in fun())
-            // we need to increment the up_to_in_reader as we are not starting from the start of the reader
+            // if up_to_in_reader > 0 then we are continuing on in the same reader from previous call to stream.read()
+            // ie we didn't need to call stream.read to finish parsing in fun()
+            // so we need to increment the up_to_in_reader as we are not starting from the start of the reader
             let (now_finished, bytes_read) = result.unwrap();
             finished = now_finished;
             up_to_in_reader += bytes_read;
@@ -228,6 +229,7 @@ fn body_from<'a>(
         .unwrap_or(vec!());
 
     if let Some(_encoding) = transfer_encoding {
+        // read(&mut stream, buffer, chunks_writer, 0)
         let result = body_chunks_(buffer, chunks_writer, "metadata", 0, 0);
         if result.is_err() {
             return Err(result.err().unwrap());
@@ -321,7 +323,6 @@ fn body_from<'a>(
     Ok((body, headers, trailers))
 }
 
-// todo() return result and err of boundary is fucked and bubble up to a 400 if to_digit doesnt work
 fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: &str, read_up_to: usize, this_chunk_size: usize) -> Result<(bool, String, usize, usize, usize, usize), MessageError> {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut chunk_size: usize = this_chunk_size;
@@ -342,7 +343,6 @@ fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: &str, read_up_to:
             // ... and know that we are at the end
             let option = (*octet as char).to_digit(10);
             if option.is_none() {
-                //todo() return bad request
                 return Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", *octet as char)));
             }
             chunk_size = (chunk_size * 10) + option.unwrap() as usize;
