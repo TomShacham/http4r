@@ -147,7 +147,6 @@ fn read(
     fun: fn(&mut [u8], &mut Vec<u8>) -> ReadResult
 ) -> (usize, usize, ReadResult) {
     let mut finished = false;
-    //todo()
     let mut result = ReadResult::Err(MessageError::HeadersTooBig("".to_string()));
     while !finished {
         if up_to_in_reader > 0 {
@@ -155,7 +154,11 @@ fn read(
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
-            (finished, up_to_in_reader) = result.unwrap();
+            // as we are in the same reader (didn't need to call stream.read to finish parsing in fun())
+            // we need to increment the up_to_in_reader as we are not starting from the start of the reader
+            let (now_finished, bytes_read) = result.unwrap();
+            finished = now_finished;
+            up_to_in_reader += bytes_read;
             if finished { break; }
         } else {
             read_bytes_from_stream = stream.read(&mut reader).unwrap();
@@ -224,6 +227,7 @@ fn body_from<'a>(
             .collect::<Vec<String>>())
         .unwrap_or(vec!());
 
+    println!("buffe {}", from_utf8(buffer).unwrap());
 
     if let Some(_encoding) = transfer_encoding {
         let result = body_chunks_(buffer, chunks_writer, "metadata", 0, 0);
@@ -428,16 +432,14 @@ fn headers_(reader: &[u8], mut writer: &mut Vec<u8>) -> ReadResult {
 
     for (index, octet) in reader.iter().enumerate() {
         writer.push(*octet);
+        up_to_in_reader = index + 1;
         if prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
-            up_to_in_reader = index + 1;
             finished = true;
             writer.pop();
             writer.pop();
             writer.pop();
             writer.pop(); // get rid of previous \r\n\r\n
             break;
-        } else {
-            up_to_in_reader = index + 1;
         }
         if writer.len() == writer.capacity() {
             return ReadResult::Err(MessageError::HeadersTooBig(format!("Headers must be less than {}", writer.capacity())));
