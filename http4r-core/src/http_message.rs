@@ -48,25 +48,25 @@ pub fn message_from<'a>(
     mut reader: &'a mut [u8],
     mut start_line_writer: &'a mut Vec<u8>,
     mut headers_writer: &'a mut Vec<u8>,
-    mut trailers_writer: &'a mut Vec<u8>,
+    trailers_writer: &'a mut Vec<u8>,
     chunks_vec: &'a mut Vec<u8>,
 ) -> Result<HttpMessage<'a>, MessageError> {
-    let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
-        read(&mut stream, &mut reader, &mut start_line_writer, 0, 0,
-             |reader, writer| { start_line_(reader, writer) },
+    let (mut read_bytes_from_stream, mut up_to_in_reader, mut _result) =
+        read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None,
+             |reader, writer, _| { start_line_(reader, writer) },
         );
     let start_line = str::from_utf8(start_line_writer).unwrap().split(" ").collect::<Vec<&str>>();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
-    (read_bytes_from_stream, up_to_in_reader, result) =
-        read(&mut stream, &mut reader, &mut headers_writer, read_bytes_from_stream, up_to_in_reader,
-             |reader, writer| { headers_(reader, writer) },
+    (read_bytes_from_stream, up_to_in_reader, _result) =
+        read(&mut stream, &mut reader, &mut headers_writer, read_bytes_from_stream, up_to_in_reader, None,
+             |reader, writer, _| { headers_(reader, writer) },
         );
 
-    if result.is_err() {
-        return Err(result.err());
+    if _result.is_err() {
+        return Err(_result.err());
     }
     let header_string = from_utf8(headers_writer.as_slice()).unwrap();
     let mut headers = Headers::parse_from(header_string);
@@ -80,8 +80,10 @@ pub fn message_from<'a>(
     }
     let is_version_1_0 = part3 == "HTTP/1.0";
     let result = body_from(
-        &mut reader[up_to_in_reader..read_bytes_from_stream],
+        &mut reader[..],
         stream.try_clone().unwrap(),
+        up_to_in_reader,
+        read_bytes_from_stream,
         chunks_vec,
         trailers_writer,
         &headers,
@@ -101,85 +103,108 @@ pub fn message_from<'a>(
 
 #[derive(Clone)]
 enum ReadResult {
-    Ok((bool, usize)),
-    Err(MessageError)
+    Ok((bool, usize, Option<ReadMetadata>)),
+    Err(MessageError),
 }
 
 impl ReadResult {
-    pub fn of(pair: (bool, usize)) -> ReadResult {
-        ReadResult::Ok(pair)
-    }
-
-    pub fn error(message_error: MessageError) -> ReadResult {
-        ReadResult::Err(message_error)
-    }
-
     pub fn err(self) -> MessageError {
         return match self {
             ReadResult::Ok(_) => panic!("Not an error"),
             ReadResult::Err(e) => e,
-        }
+        };
     }
 
     pub fn is_err(&self) -> bool {
         return match self {
             ReadResult::Ok(_) => false,
             ReadResult::Err(_) => true
-        }
+        };
     }
 
-    pub fn unwrap(&self) -> (bool, usize) {
+    pub fn unwrap(&self) -> (bool, usize, Option<ReadMetadata>) {
         *match &self {
-            ReadResult::Ok(pair) => pair,
+            ReadResult::Ok(triple) => triple,
             ReadResult::Err(e) => panic!("Called unwrap on error: {}", e.to_string())
         }
     }
-
 }
 
+#[derive(Copy, Clone)]
+struct ChunkedMetadata {
+    mode: ReadMode,
+    chunk_size: usize,
+    bytes_of_this_chunk_read: usize,
+}
+
+#[derive(Copy, Clone)]
+struct MultipartMetadata {}
+
+#[derive(Copy, Clone)]
+enum ReadMetadata {
+    Chunked(ChunkedMetadata),
+    Multipart(MultipartMetadata),
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum ReadMode {
+    Metadata,
+    Data,
+}
+
+impl ReadMetadata {
+    pub fn chunked(mode: ReadMode, chunk_size: usize, bytes_of_this_chunk_read: usize) -> ReadMetadata {
+        ReadMetadata::Chunked(ChunkedMetadata { mode, chunk_size, bytes_of_this_chunk_read })
+    }
+
+    pub fn to_chunked_metadata(self) -> ChunkedMetadata {
+        match self {
+            ReadMetadata::Chunked(m) => m,
+            ReadMetadata::Multipart(_) => panic!("Have multipart metadata but expected chunked metadata")
+        }
+    }
+}
 
 fn read(
     stream: &mut TcpStream,
     mut reader: &mut [u8],
-    mut writer: &mut Vec<u8>,
+    writer: &mut Vec<u8>,
     mut read_bytes_from_stream: usize,
     mut up_to_in_reader: usize,
-    fun: fn(&mut [u8], &mut Vec<u8>) -> ReadResult
+    mut metadata: Option<ReadMetadata>,
+    fun: fn(&mut [u8], &mut Vec<u8>, Option<ReadMetadata>) -> ReadResult,
 ) -> (usize, usize, ReadResult) {
     let mut finished = false;
     let mut result = ReadResult::Err(MessageError::HeadersTooBig("".to_string()));
     while !finished {
         if up_to_in_reader > 0 {
-            result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer);
+            result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer, metadata);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
             // if up_to_in_reader > 0 then we are continuing on in the same reader from previous call to stream.read()
             // ie we didn't need to call stream.read to finish parsing in fun()
             // so we need to increment the up_to_in_reader as we are not starting from the start of the reader
-            let (now_finished, bytes_read) = result.unwrap();
+            let (now_finished, new_up_to_in_reader, new_metadata) = result.unwrap();
+            metadata = new_metadata;
             finished = now_finished;
-            up_to_in_reader += bytes_read;
+            // if we reached the end of the reader then set to zero, otherwise add on how far through we got
+            if new_up_to_in_reader == 0 {
+                up_to_in_reader = 0
+            } else {
+                up_to_in_reader += new_up_to_in_reader
+            };
             if finished { break; }
         } else {
             read_bytes_from_stream = stream.read(&mut reader).unwrap();
-            result = fun(&mut reader[..read_bytes_from_stream], writer);
+            result = fun(&mut reader[..read_bytes_from_stream], writer, metadata);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
-            (finished, up_to_in_reader) = result.unwrap();
+            (finished, up_to_in_reader, metadata) = result.unwrap();
         }
     }
     (read_bytes_from_stream, up_to_in_reader, result)
-}
-
-fn do_thing(reader: &mut [u8], mut start_line_writer: &mut Vec<u8>, fun: fn(&mut [u8], &mut Vec<u8>) -> Result<(bool, usize), MessageError>) -> Result<(bool, usize), MessageError> {
-    let mut result = fun(reader, start_line_writer);
-    if result.is_err() {
-        return Err(result.err().unwrap());
-    }
-    let (mut finished, mut up_to_in_reader) = result.ok().unwrap();
-    Ok((finished, up_to_in_reader))
 }
 
 fn message<'a>(part1: String, part2: &'a str, part3: String, is_response: bool, body: Body<'a>, headers: Headers, trailers: Headers) -> Result<HttpMessage<'a>, MessageError> {
@@ -206,8 +231,10 @@ fn message<'a>(part1: String, part2: &'a str, part3: String, is_response: bool, 
 }
 
 fn body_from<'a>(
-    mut buffer: &'a mut [u8],
+    reader: &'a mut [u8],
     mut stream: TcpStream,
+    up_to_in_reader: usize,
+    read_bytes_from_stream: usize,
     chunks_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
     existing_headers: &Headers,
@@ -229,48 +256,24 @@ fn body_from<'a>(
         .unwrap_or(vec!());
 
     if let Some(_encoding) = transfer_encoding {
-        // read(&mut stream, buffer, chunks_writer, 0)
-        let result = body_chunks_(buffer, chunks_writer, "metadata", 0, 0);
-        if result.is_err() {
-            return Err(result.err().unwrap());
-        }
-        let (mut finished, mut mode, mut chunked_body_bytes_read, mut read_of_current_chunk, mut chunk_size, mut start_of_trailers) = result.unwrap();
+        let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
+        let (read_bytes_from_stream, up_to_in_reader, result) = read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
+            let meta = metadata.unwrap().to_chunked_metadata();
+            body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size)
+        });
+        let (_finished, chunked_body_bytes_read, _metadata) = result.unwrap();
 
-        let mut last_read_bytes = buffer.len();
-        while !finished {
-            let result = stream.read(&mut buffer);
-            if result.is_err() { continue; };
-            let read = result.unwrap();
-            if read == 0 {
-                break;
-            }
-            last_read_bytes = read;
-
-            let result = body_chunks_(&buffer, chunks_writer, mode.to_string().as_str(), read_of_current_chunk, chunk_size);
-            if result.is_err() {
-                return Err(result.err().unwrap());
-            }
-            let (is_finished, current_mode, bytes_read, up_to_in_chunk, current_chunk_size, trailers_start_at) = result.unwrap();
-
-            mode = current_mode;
-            chunked_body_bytes_read += bytes_read;
-            read_of_current_chunk = up_to_in_chunk;
-            chunk_size = current_chunk_size;
-            start_of_trailers = trailers_start_at;
-            finished = is_finished;
-        }
-
-        let more_bytes_to_read_after_body = start_of_trailers < last_read_bytes;
+        let more_bytes_to_read_after_body = up_to_in_reader < read_bytes_from_stream;
         if more_bytes_to_read_after_body {
-            let result = trailers_(&buffer[start_of_trailers..], trailers_writer);
+            let result = trailers_(&reader[up_to_in_reader..], trailers_writer);
             if result.is_err() {
                 return Err(result.err().unwrap());
             }
-            let (mut finished, mut new_trailers) = result.unwrap();
+            let (mut finished, new_trailers) = result.unwrap();
             trailers = new_trailers;
             while !finished {
                 let mut buffer = [0; 4096];
-                let result = stream.read(&mut buffer).unwrap();
+                let _bytes_read = stream.read(&mut buffer).unwrap();
                 let result = trailers_(&buffer, trailers_writer);
                 if result.is_err() {
                     return Err(result.err().unwrap());
@@ -292,23 +295,25 @@ fn body_from<'a>(
             headers = headers.add(("Content-Length", chunked_body_bytes_read.to_string().as_str()))
                 .remove("Transfer-Encoding");
         }
-        body = BodyStream(Box::new(chunks_writer.take(chunked_body_bytes_read as u64)));
+        body = BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)));
     } else {
+        let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
         match content_length {
             Some(_) if is_request && !method_can_have_body => {
                 headers = headers.replace(("Content-Length", "0"));
                 body = Body::empty()
             }
             // we have read the whole body in the first read
-            Some(Ok(content_length)) if buffer.len() == content_length => {
-                let result = str::from_utf8(&buffer[..]).unwrap();
+            Some(Ok(content_length)) if bytes_left_in_reader == content_length => {
+                let result = str::from_utf8(&reader[up_to_in_reader..read_bytes_from_stream]).unwrap();
                 body = Body::BodyString(result)
             }
             Some(Ok(content_length)) => {
                 // we need to read more to get the body
-                if content_length > buffer.len() {
-                    let rest = stream.take(content_length as u64 - buffer.len() as u64);
-                    body = Body::BodyStream(Box::new(buffer.chain(rest)));
+                //todo() do we need this if else? arent they the same
+                if content_length > bytes_left_in_reader {
+                    let rest = stream.take((content_length - bytes_left_in_reader) as u64);
+                    body = Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)));
                 } else {
                     let body_stream = stream.take(content_length as u64);
                     body = Body::BodyStream(Box::new(body_stream));
@@ -323,68 +328,66 @@ fn body_from<'a>(
     Ok((body, headers, trailers))
 }
 
-fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: &str, read_up_to: usize, this_chunk_size: usize) -> Result<(bool, String, usize, usize, usize, usize), MessageError> {
+fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize) -> ReadResult {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut chunk_size: usize = this_chunk_size;
-    let mut bytes_of_this_chunk_read = read_up_to;
+    let mut bytes_of_this_chunk_read_previously = read_up_to;
     let mut finished = false;
-    let mut bytes_read_from_current_chunk: usize = 0;
-    let mut total_bytes_read: usize = 0;
-    let mut start_of_trailers: usize = 0;
+    let mut bytes_of_chunk_read_this_pass: usize = 0;
+    let mut up_to_in_reader: usize = 0;
 
     for (index, octet) in reader.iter().enumerate() {
         prev.remove(0);
         prev.push(*octet as char);
 
         let on_boundary = *octet == b'\n' || *octet == b'\r';
-        if mode == "metadata" && !on_boundary {
+        if mode == ReadMode::Metadata && !on_boundary {
             // if we have a digit, multiply last digit by 10 and add this one
             // if first digit we encounter is 0 then we'll multiply 0 by 10 and get 0
             // ... and know that we are at the end
             let option = (*octet as char).to_digit(10);
             if option.is_none() {
-                return Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", *octet as char)));
+                return ReadResult::Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", *octet as char)));
             }
             chunk_size = (chunk_size * 10) + option.unwrap() as usize;
             if chunk_size == 0 { // we have encountered the 0 chunk
-                //todo() if at the end of the buffer but we need to read again to get trailers
                 finished = true;
-                start_of_trailers = index + 3; // add 5 cos we didn't read the \r\n after the 0
+                up_to_in_reader = index + 3; // add 3 to go past the 0\r\n at the end
                 break;
             }
-        } else if mode == "metadata" && on_boundary {
+        } else if mode == ReadMode::Metadata && on_boundary {
             // if we're on the boundary, continue, or change mode to read once we've seen \n
             if *octet == b'\n' {
-                mode = "read";
+                mode = ReadMode::Data;
             }
             continue;
         }
-        if mode == "read" && bytes_read_from_current_chunk < (chunk_size - bytes_of_this_chunk_read) {
+        if mode == ReadMode::Data && bytes_of_chunk_read_this_pass < (chunk_size - bytes_of_this_chunk_read_previously) {
             writer.push(*octet);
-            bytes_read_from_current_chunk += 1;
+            bytes_of_chunk_read_this_pass += 1;
             let last_iteration = index == reader.len() - 1;
             if last_iteration {
                 // if last index, add on the bytes read from current chunk
-                bytes_of_this_chunk_read += bytes_read_from_current_chunk;
-                total_bytes_read += bytes_read_from_current_chunk;
-                start_of_trailers = index + 3;
+                bytes_of_this_chunk_read_previously += bytes_of_chunk_read_this_pass;
+                up_to_in_reader = 0;
                 break;
             }
-        } else if mode == "read" && on_boundary {
+        } else if mode == ReadMode::Data && on_boundary {
             // if we're on the boundary, continue, or change mode to metadata once we've seen \n
             // and reset counters
             if *octet == b'\n' {
-                total_bytes_read += bytes_read_from_current_chunk;
-                bytes_of_this_chunk_read = 0;
+                bytes_of_this_chunk_read_previously = 0;
                 chunk_size = 0;
-                bytes_read_from_current_chunk = 0;
-                mode = "metadata";
+                bytes_of_chunk_read_this_pass = 0;
+                mode = ReadMode::Metadata;
             }
             continue;
         }
     }
 
-    Ok((finished, mode.to_string(), total_bytes_read, bytes_of_this_chunk_read, chunk_size, start_of_trailers))
+    //todo() start of trailers also needed ??
+    let metadata = ReadMetadata::chunked(mode, chunk_size, bytes_of_this_chunk_read_previously);
+    ReadResult::Ok((finished, up_to_in_reader, Some(metadata)))
 }
 
 fn check_valid_content_length_or_transfer_encoding(headers: &Headers, is_response: bool, method_can_have_body: bool) -> Result<(), MessageError> {
@@ -399,7 +402,7 @@ fn check_valid_content_length_or_transfer_encoding(headers: &Headers, is_respons
     Ok(())
 }
 
-fn start_line_(reader: &[u8], mut writer: &mut Vec<u8>) -> ReadResult {
+fn start_line_(reader: &[u8], writer: &mut Vec<u8>) -> ReadResult {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut up_to_in_reader = if reader.len() > 0 { reader.len() - 1 } else { 0 };
     let mut finished = false;
@@ -420,10 +423,10 @@ fn start_line_(reader: &[u8], mut writer: &mut Vec<u8>) -> ReadResult {
         prev.push(*octet as char);
     }
 
-    ReadResult::Ok((finished, up_to_in_reader))
+    ReadResult::Ok((finished, up_to_in_reader, None))
 }
 
-fn headers_(reader: &[u8], mut writer: &mut Vec<u8>) -> ReadResult {
+fn headers_(reader: &[u8], writer: &mut Vec<u8>) -> ReadResult {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut up_to_in_reader = reader.len() - 1;
     let mut finished = false;
@@ -446,7 +449,7 @@ fn headers_(reader: &[u8], mut writer: &mut Vec<u8>) -> ReadResult {
         prev.push(*octet as char);
     }
 
-    ReadResult::Ok((finished, up_to_in_reader))
+    ReadResult::Ok((finished, up_to_in_reader, None))
 }
 
 fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> Result<(bool, Headers), MessageError> {
@@ -457,7 +460,7 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> Result<(bool, Headers), Mes
         return Ok((true, Headers::empty()));
     }
 
-    for (index, octet) in buffer.iter().enumerate() {
+    for (_index, octet) in buffer.iter().enumerate() {
         if prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
             finished = true;
             break;
@@ -569,7 +572,7 @@ It is not an error if the returned value n is smaller than the buffer size, even
 This may happen for example because fewer bytes are actually available right now (e. g. being close to end-of-file) or because read() was interrupted by a signal.
  */
 pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {
-    let mut buffer = &mut [0 as u8; 16384];
+    let buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);
     let mut first_write = true;
 
@@ -626,7 +629,7 @@ pub enum MessageError {
     StartLineTooBig(String),
     HeadersTooBig(String),
     TrailersTooBig(String),
-    InvalidBoundaryDigit(String)
+    InvalidBoundaryDigit(String),
 }
 
 impl MessageError {

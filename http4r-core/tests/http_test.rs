@@ -34,12 +34,15 @@ mod tests {
 
     #[test]
     fn gives_you_a_bodystream_if_entity_bigger_than_buffer() {
-        let buffer = repeat(116).take(20000);
+        let long_string = "t".repeat(20000);
 
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client::new("127.0.0.1", server.port, None);
-        let post_with_stream_body = Request::post(Uri::parse("/"), Headers::from(vec!(("Content-Length", "20000"))), BodyStream(Box::new(buffer)));
+        let post_with_stream_body = Request::post(
+            Uri::parse("/"),
+            Headers::from(vec!(("Content-Length", "20000"))),
+            BodyString(long_string.as_str()));
 
         client.handle(post_with_stream_body, |response| {
             match response.body {
@@ -47,7 +50,7 @@ mod tests {
                 BodyStream(s) => {
                     let string = body_string(BodyStream(s));
                     assert_eq!(20000, string.len());
-                    assert_eq!(string[0..10], "tttttttttt".to_string());
+                    assert_eq!(string, long_string.to_string());
                     assert_eq!("OK", response.status.to_string());
                     assert_eq!("Content-Length: 20000", response.headers.to_wire_string());
                 }

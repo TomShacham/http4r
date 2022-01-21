@@ -1,5 +1,3 @@
-#![feature(destructuring_assignment)]
-
 pub mod client;
 pub mod filter;
 pub mod http_message;
