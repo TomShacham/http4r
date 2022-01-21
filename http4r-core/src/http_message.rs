@@ -227,8 +227,6 @@ fn body_from<'a>(
             .collect::<Vec<String>>())
         .unwrap_or(vec!());
 
-    println!("buffe {}", from_utf8(buffer).unwrap());
-
     if let Some(_encoding) = transfer_encoding {
         let result = body_chunks_(buffer, chunks_writer, "metadata", 0, 0);
         if result.is_err() {
@@ -345,7 +343,7 @@ fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: &str, read_up_to:
             let option = (*octet as char).to_digit(10);
             if option.is_none() {
                 //todo() return bad request
-                println!("tried to digitise {}", *octet as char)
+                return Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", *octet as char)));
             }
             chunk_size = (chunk_size * 10) + option.unwrap() as usize;
             if chunk_size == 0 { // we have encountered the 0 chunk
@@ -628,6 +626,7 @@ pub enum MessageError {
     StartLineTooBig(String),
     HeadersTooBig(String),
     TrailersTooBig(String),
+    InvalidBoundaryDigit(String)
 }
 
 impl MessageError {
@@ -638,6 +637,7 @@ impl MessageError {
             MessageError::StartLineTooBig(_) => "Start line too big".to_string(),
             MessageError::HeadersTooBig(_) => "Headers too big".to_string(),
             MessageError::TrailersTooBig(_) => "Trailers too big".to_string(),
+            MessageError::InvalidBoundaryDigit(_) => "Invalid boundary digit in chunked encoding".to_string(),
         }
     }
 }

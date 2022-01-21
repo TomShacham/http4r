@@ -87,6 +87,7 @@ impl Server where {
             | Err(MessageError::TrailersTooBig(msg))
             | Err(MessageError::InvalidContentLength(msg))
             | Err(MessageError::StartLineTooBig(msg))
+            | Err(MessageError::InvalidBoundaryDigit(msg))
             => {
                 let response = Response::bad_request(Headers::empty(), BodyString(msg.as_str()));
                 write_body(&mut stream, HttpMessage::Response(response));
