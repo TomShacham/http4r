@@ -148,7 +148,6 @@ When a chunked message containing a non-empty trailer is received,
    were present in the header section might bypass external security
    filters.
 */
-    //todo() failing intermittently
     #[test]
     fn cannot_set_certain_trailers_as_headers() {
         let mut server = Server::new(0);
@@ -349,8 +348,8 @@ When a chunked message containing a non-empty trailer is received,
         )));
 
         client.handle(asks_for_trailers, |response: Response| {
-            assert_eq!(BadRequest, response.status);
             assert_eq!("Trailers must be less than 16384", body_string(response.body));
+            assert_eq!(BadRequest, response.status);
             assert_eq!(vec!(
                 ("Content-Length".to_string(), "32".to_string()),
             ), response.headers.vec);

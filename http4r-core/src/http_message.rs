@@ -49,9 +49,9 @@ pub fn message_from<'a>(
     mut start_line_writer: &'a mut Vec<u8>,
     mut headers_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
-    chunks_vec: &'a mut Vec<u8>,
+    chunks_writer: &'a mut Vec<u8>,
 ) -> Result<HttpMessage<'a>, MessageError> {
-    let (mut read_bytes_from_stream, mut up_to_in_reader, mut _result) =
+    let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
         read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None,
              |reader, writer, _| { start_line_(reader, writer) },
         );
@@ -60,13 +60,13 @@ pub fn message_from<'a>(
     let is_response = part1.starts_with("HTTP");
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
-    (read_bytes_from_stream, up_to_in_reader, _result) =
+    (read_bytes_from_stream, up_to_in_reader, result) =
         read(&mut stream, &mut reader, &mut headers_writer, read_bytes_from_stream, up_to_in_reader, None,
              |reader, writer, _| { headers_(reader, writer) },
         );
 
-    if _result.is_err() {
-        return Err(_result.err());
+    if result.is_err() {
+        return Err(result.err());
     }
     let header_string = from_utf8(headers_writer.as_slice()).unwrap();
     let mut headers = Headers::parse_from(header_string);
@@ -84,7 +84,7 @@ pub fn message_from<'a>(
         stream.try_clone().unwrap(),
         up_to_in_reader,
         read_bytes_from_stream,
-        chunks_vec,
+        chunks_writer,
         trailers_writer,
         &headers,
         is_version_1_0,
@@ -257,32 +257,26 @@ fn body_from<'a>(
 
     if let Some(_encoding) = transfer_encoding {
         let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
-        let (read_bytes_from_stream, up_to_in_reader, result) = read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
+        let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) = read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
             let meta = metadata.unwrap().to_chunked_metadata();
             body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size)
         });
+        if result.is_err() {
+            return Err(result.err());
+        }
         let (_finished, chunked_body_bytes_read, _metadata) = result.unwrap();
 
         let more_bytes_to_read_after_body = up_to_in_reader < read_bytes_from_stream;
         if more_bytes_to_read_after_body {
-            let result = trailers_(&reader[up_to_in_reader..], trailers_writer);
-            if result.is_err() {
-                return Err(result.err().unwrap());
-            }
-            let (mut finished, new_trailers) = result.unwrap();
-            trailers = new_trailers;
-            while !finished {
-                let mut buffer = [0; 4096];
-                let _bytes_read = stream.read(&mut buffer).unwrap();
-                let result = trailers_(&buffer, trailers_writer);
-                if result.is_err() {
-                    return Err(result.err().unwrap());
-                }
-                let (is_finished, new_trailers) = result.unwrap();
-                trailers = new_trailers;
-                finished = is_finished;
-            }
+            (read_bytes_from_stream, up_to_in_reader, result) = read(&mut stream, reader, trailers_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, _| {
+                trailers_(reader, writer)
+            });
         }
+        if result.is_err() {
+            return Err(result.err());
+        }
+        let trailer_string = from_utf8(trailers_writer.as_slice()).unwrap();
+        trailers = Headers::parse_from(trailer_string);
 
         if !happy_to_receive_trailers {
             let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
@@ -446,13 +440,9 @@ fn headers_(reader: &[u8], writer: &mut Vec<u8>) -> ReadResult {
     ReadResult::Ok((finished, up_to_in_reader, None))
 }
 
-fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> Result<(bool, Headers), MessageError> {
+fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> ReadResult {
     let mut prev: Vec<char> = vec!('1', '2', '3', '4');
     let mut finished = false;
-
-    if buffer.len() == 0 {
-        return Ok((true, Headers::empty()));
-    }
 
     for (_index, octet) in buffer.iter().enumerate() {
         if prev[1] == '\r' && prev[2] == '\n' && prev[3] == '\r' && *octet == b'\n' {
@@ -460,7 +450,7 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> Result<(bool, Headers), Mes
             break;
         }
         if writer.len() == writer.capacity() {
-            return Err(MessageError::TrailersTooBig(format!("Trailers must be less than {}", writer.capacity())));
+            return ReadResult::Err(MessageError::TrailersTooBig(format!("Trailers must be less than {}", writer.capacity())));
         }
         prev.remove(0);
         prev.push(*octet as char);
@@ -475,7 +465,8 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> Result<(bool, Headers), Mes
         let header_string = str::from_utf8(writer.as_slice()).unwrap();
         headers = Headers::parse_from(header_string);
     }
-    Ok((finished, headers))
+
+    ReadResult::Ok((finished, 0, None))
 }
 
 pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
