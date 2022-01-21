@@ -34,6 +34,12 @@ impl Server where {
     pub fn start<F, H>(&mut self, fun: F)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
         let listener = self.listen();
+        println!("Server listening on port {}", self.port);
+        println!("{}", "http4r  Copyright (C) 2021  Tom Shacham
+This program comes with ABSOLUTELY NO WARRANTY.
+This is free software, and you are welcome to redistribute it
+under certain conditions.
+If you are using this software for profit, please donate.".trim());
         let handler = Arc::new(fun);
 
         let pool = ThreadPool::new(10 as usize);
