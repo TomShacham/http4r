@@ -19,6 +19,9 @@
   - can test in-browser (not over the wire!) by compiling your app to WASM so
     we can write lightning-fast tests for our front end
 
+
+### GPL Copyright
+
 http4r is a web toolkit
 Copyright (C) 2021-onwards Tom Shacham
 
