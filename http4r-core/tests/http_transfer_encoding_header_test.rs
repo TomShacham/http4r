@@ -2,13 +2,13 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::io::{Cursor, Write};
     use std::net::TcpStream;
     use http4r_core::client::Client;
     use http4r_core::handler::Handler;
     use http4r_core::headers::{Headers, HeaderType};
     use http4r_core::http_message::{body_string, Request, Response, Status};
-    use http4r_core::http_message::Body::BodyString;
+    use http4r_core::http_message::Body::{BodyStream, BodyString};
     use http4r_core::http_message::Status::{BadRequest, OK};
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
@@ -376,9 +376,27 @@ When a chunked message containing a non-empty trailer is received,
         })
     }
 
-    //test bad request if invalid boundary digit
+    #[test]
+    fn writing_a_chunked_body_stream() {
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassThroughHandler {}) });
 
-    //test that we read the body into non chunked encoding if it's http 1.0
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
-    //test body stream writes chunks correctly
+        let string1 = "hello my baby, hello my honey, hello my ragtime gal".repeat(1000);
+        let little_string = string1.as_bytes().to_vec();
+
+        let big_chunked_request = Request::post(
+            Uri::parse("/bob"),
+            Headers::from(vec!(("Transfer-Encoding", "chunked"))),
+            BodyStream(Box::new(Cursor::new(little_string))));
+
+        client.handle(big_chunked_request, |response: Response| {
+            assert_eq!(string1, body_string(response.body));
+            assert_eq!(OK, response.status);
+            assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
+        });
+    }
+
+    //test that we read the body into non-chunked-encoding if it's http 1.0
 }
