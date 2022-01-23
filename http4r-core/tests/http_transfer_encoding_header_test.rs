@@ -2,16 +2,18 @@ mod common;
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+    use std::net::TcpStream;
     use http4r_core::client::Client;
     use http4r_core::handler::Handler;
     use http4r_core::headers::{Headers, HeaderType};
-    use http4r_core::http_message::{body_string, Request, Response};
+    use http4r_core::http_message::{body_string, Request, Response, Status};
     use http4r_core::http_message::Body::BodyString;
     use http4r_core::http_message::Status::{BadRequest, OK};
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
 
-    use crate::common::PassThroughHandler;
+    use crate::common::{NaughtyClient, PassThroughHandler};
 
     /*
         If a message is received with both a Transfer-Encoding and a
@@ -203,7 +205,7 @@ When a chunked message containing a non-empty trailer is received,
      */
     #[allow(non_snake_case)]
     #[test]
-    fn dont_get_trailers_unless_TE_specified(){
+    fn dont_get_trailers_unless_TE_specified() {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client::new("127.0.0.1", server.port, None);
@@ -322,13 +324,13 @@ When a chunked message containing a non-empty trailer is received,
 
     #[allow(non_snake_case)]
     #[test]
-    fn TE_and_Connection_header_with_ranked_compression(){
+    fn TE_and_Connection_header_with_ranked_compression() {
         println!("ROCK AND STONE BROTHER?");
     }
 
     //todo() test for headers too big in http_test
     #[test]
-    fn if_trailers_are_too_long_we_get_an_error(){
+    fn if_trailers_are_too_long_we_get_an_error() {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut client = Client::new("127.0.0.1", server.port, None);
@@ -358,10 +360,25 @@ When a chunked message containing a non-empty trailer is received,
         });
     }
 
+    #[test]
+    fn best_request_if_invalid_boundary_digit() {
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassThroughHandler {}) });
+        let mut stream = TcpStream::connect(format!("127.0.0.1:{}", server.port)).unwrap();
+
+        let write = stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes());
+
+        let mut client = NaughtyClient { port: server.port };
+
+        client.handle(Request::get(Uri::parse("/"), Headers::from(vec!(("Transfer-encoding" , "chunked")))), |res| {
+            assert_eq!(res.status, Status::BadRequest);
+            assert_eq!(body_string(res.body), "Could not parse boundary character X in chunked encoding".to_string())
+        })
+    }
+
     //test bad request if invalid boundary digit
 
     //test that we read the body into non chunked encoding if it's http 1.0
 
     //test body stream writes chunks correctly
-
 }
