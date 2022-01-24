@@ -49,6 +49,7 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
 ---
 - core api
   - limits on headers and body etc tests 
+  - do we want to drop connections in stream.incoming() or do we want to hang onto them for a while
   - if version is known to be 1.0 then do not send chunked message
     - stream into memory and forward as content-length 
   - multipart form data

@@ -32,12 +32,12 @@ pub struct NaughtyClient {
 }
 
 impl Handler for NaughtyClient {
-    fn handle<F>(self: &mut NaughtyClient, req: Request, fun: F) -> ()
+    fn handle<F>(self: &mut NaughtyClient, _req: Request, fun: F) -> ()
         where F: FnOnce(Response) -> () + Sized {
         let uri = format!("127.0.0.1:{}", self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
 
-        stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes());
+        stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes()).unwrap();
 
         let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_vec = Vec::with_capacity(1048576);

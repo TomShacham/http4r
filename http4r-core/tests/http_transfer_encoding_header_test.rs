@@ -263,9 +263,6 @@ When a chunked message containing a non-empty trailer is received,
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
             ), response.trailers.vec);
         });
-
-        //todo() send response as chunked encoding (copy from client)
-        // and client to parse it back out and read trailers
     }
 
 
@@ -325,10 +322,9 @@ When a chunked message containing a non-empty trailer is received,
     #[allow(non_snake_case)]
     #[test]
     fn TE_and_Connection_header_with_ranked_compression() {
-        println!("ROCK AND STONE BROTHER?");
+
     }
 
-    //todo() test for headers too big in http_test
     #[test]
     fn if_trailers_are_too_long_we_get_an_error() {
         let mut server = Server::new(0);
@@ -366,7 +362,7 @@ When a chunked message containing a non-empty trailer is received,
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut stream = TcpStream::connect(format!("127.0.0.1:{}", server.port)).unwrap();
 
-        let write = stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes());
+        let _write = stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes());
 
         let mut client = NaughtyClient { port: server.port };
 

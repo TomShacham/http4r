@@ -61,6 +61,7 @@ impl<'a> HttpMessage<'a> {
     }
 }
 
+#[allow(unused_assignments)]
 pub fn message_from<'a>(
     mut stream: TcpStream,
     mut reader: &'a mut [u8],
@@ -248,6 +249,7 @@ fn message<'a>(part1: String, part2: &'a str, part3: String, is_response: bool, 
     }
 }
 
+#[allow(unused_assignments, unused_variables)]
 fn body_from<'a>(
     reader: &'a mut [u8],
     mut stream: TcpStream,
@@ -475,13 +477,10 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> ReadResult {
         writer.push(*octet);
     }
 
-    let mut headers = Headers::empty();
     if finished {
         writer.pop();
         writer.pop();
         writer.pop(); // get rid of previous \r\n\r\n
-        let header_string = str::from_utf8(writer.as_slice()).unwrap();
-        headers = Headers::parse_from(header_string);
     }
 
     ReadResult::Ok((finished, 0, None))
