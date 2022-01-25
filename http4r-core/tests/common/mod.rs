@@ -27,12 +27,12 @@ impl Handler for PassThroughHandler {
     }
 }
 
-pub struct NaughtyClient {
+pub struct MalformedChunkedEncodingClient {
     pub port: u16,
 }
 
-impl Handler for NaughtyClient {
-    fn handle<F>(self: &mut NaughtyClient, _req: Request, fun: F) -> ()
+impl Handler for MalformedChunkedEncodingClient {
+    fn handle<F>(self: &mut MalformedChunkedEncodingClient, _req: Request, fun: F) -> ()
         where F: FnOnce(Response) -> () + Sized {
         let uri = format!("127.0.0.1:{}", self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
@@ -44,7 +44,7 @@ impl Handler for NaughtyClient {
         let mut start_line_writer = Vec::with_capacity(16384);
         let mut headers_writer = Vec::with_capacity(16384);
         let mut trailers_writer = Vec::with_capacity(16384);
-        let result = message_from(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut trailers_writer, &mut chunks_vec);
+        let result = message_from(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut chunks_vec, &mut trailers_writer);
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,

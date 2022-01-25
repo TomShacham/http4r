@@ -5,13 +5,18 @@ pub struct Headers {
 pub type HeaderType = (String, String);
 pub type HeadersType = Vec<HeaderType>;
 
-pub static DISALLOWED_TRAILERS: [&'static str; 22] = [
+pub static DISALLOWED_TRAILERS: [&'static str; 34] = [
     //authorization
     "authorization",
     "www-authenticate",
     "proxy-authenticate",
     "proxy-authorization",
     "set-cookie",
+    "cookie",
+    "cookie2",
+    "access-control-allow-origin",
+    "access-control-allow-headers",
+
     //transfer
     "transfer-encoding",
     "content-length",
@@ -20,8 +25,12 @@ pub static DISALLOWED_TRAILERS: [&'static str; 22] = [
     "vary",
     "retry-after",
     "content-encoding",
+    "accept-encoding",
     "content-type",
     "content-range",
+    "keep-alive",
+    "upgrade",
+
     //controls
     "cache-control",
     "expect",
@@ -29,9 +38,16 @@ pub static DISALLOWED_TRAILERS: [&'static str; 22] = [
     "pragma",
     "range",
     "te",
+    "expect",
+    "dnt",
+    "feature-policy",
+    "via",
+
     //routing
     "host",
-    "connection"
+    "connection",
+    "origin",
+
 ];
 
 
@@ -72,6 +88,14 @@ impl Headers {
             new.push((header.0.to_string(), header.1.to_string()))
         }
         Headers { vec: new }
+    }
+
+    pub fn ensure(&self, header: (&str, &str)) -> Headers {
+        if !self.has(header.0) {
+            self.add(header)
+        } else {
+            Headers::add_all(self, Headers::empty())
+        }
     }
 
     pub fn add_all(&self, headers: Headers) -> Headers {

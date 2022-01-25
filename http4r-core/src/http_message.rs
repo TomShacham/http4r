@@ -16,10 +16,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::io::{copy, Read, Write};
+use std::io::{copy, Cursor, Read, Write};
 use std::net::TcpStream;
 use std::str;
 use std::str::from_utf8;
+use flate2::{Compression, GzBuilder};
+use flate2::read::GzEncoder;
 
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
@@ -67,8 +69,8 @@ pub fn message_from<'a>(
     mut reader: &'a mut [u8],
     mut start_line_writer: &'a mut Vec<u8>,
     mut headers_writer: &'a mut Vec<u8>,
-    trailers_writer: &'a mut Vec<u8>,
     chunks_writer: &'a mut Vec<u8>,
+    trailers_writer: &'a mut Vec<u8>,
 ) -> Result<HttpMessage<'a>, MessageError> {
     let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
         read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None,
@@ -326,7 +328,8 @@ fn body_from<'a>(
                 // we need to read more to get the body
                 //todo() do we need this if else? arent they the same
                 let rest = stream.take((content_length - bytes_left_in_reader) as u64);
-                body = Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)));            }
+                body = Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)));
+            }
             Some(Err(error)) => {
                 return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
             }
@@ -486,12 +489,26 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> ReadResult {
     ReadResult::Ok((finished, 0, None))
 }
 
+pub enum CompressionAlgorithm {
+    GZIP,
+    DEFLATE,
+    COMPRESS,
+    NONE,
+}
+
 pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
     match message {
         HttpMessage::Request(mut req) => {
             let has_transfer_encoding = req.headers.has("Transfer-Encoding");
             let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, has_transfer_encoding, &req.version)
                 .unwrap_or(req.headers);
+
+            let compression = match headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")) {
+                Some(value) if value.contains("gzip") => CompressionAlgorithm::GZIP,
+                Some(value) if value.contains("deflate") => CompressionAlgorithm::DEFLATE,
+                Some(value) if value.contains("compress") => CompressionAlgorithm::COMPRESS,
+                _ => CompressionAlgorithm::NONE,
+            };
 
             let mut request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
                                              req.method.value(),

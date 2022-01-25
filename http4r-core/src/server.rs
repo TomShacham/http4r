@@ -4,7 +4,7 @@ use std::io::{Write};
 use std::sync::Arc;
 use crate::handler::Handler;
 use crate::headers::Headers;
-use crate::http_message::{HttpMessage, message_from, MessageError, Response, write_body};
+use crate::http_message::{CompressionAlgorithm, HttpMessage, message_from, MessageError, Response, write_body};
 use crate::http_message::Body::{BodyString};
 use crate::pool::ThreadPool;
 
@@ -84,8 +84,8 @@ If you are using this software for profit, please donate.".trim());
             &mut reader,
             &mut chunks_vec,
             &mut start_line_writer,
-            &mut headers_writer,
             &mut trailers_writer,
+            &mut headers_writer,
         );
 
         match result {

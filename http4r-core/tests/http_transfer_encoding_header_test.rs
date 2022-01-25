@@ -2,8 +2,11 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Write};
+    use std::io::{Cursor, Read, Write};
     use std::net::TcpStream;
+    use flate2::bufread::GzEncoder;
+    use flate2::Compression;
+    use flate2::read::GzDecoder;
     use http4r_core::client::Client;
     use http4r_core::handler::Handler;
     use http4r_core::headers::{Headers, HeaderType};
@@ -13,7 +16,7 @@ mod tests {
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
 
-    use crate::common::{NaughtyClient, PassThroughHandler};
+    use crate::common::{MalformedChunkedEncodingClient, PassThroughHandler};
 
     /*
         If a message is received with both a Transfer-Encoding and a
@@ -321,8 +324,34 @@ When a chunked message containing a non-empty trailer is received,
 
     #[allow(non_snake_case)]
     #[test]
-    fn TE_and_Connection_header_with_ranked_compression() {
+    fn TE_with_ranked_compression() {
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassThroughHandler {}) });
+        let mut client = Client::new("127.0.0.1", server.port, None);
 
+        let body = "hello".repeat(10000);
+        let chunked_with_TE = Request::post(
+            Uri::parse("/bob"),
+            Headers::from(vec!(
+                ("Transfer-Encoding", "chunked"),
+                ("Trailer", "Expires"),
+                ("TE", "trailers, deflate;q=0.5, gzip;q=0.9"),
+                ("Connection", "TE"),
+            )),
+            BodyString(body.as_str()),
+        ).with_trailers(Headers::from(vec!(
+            ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT")
+        )));
+
+        client.handle(chunked_with_TE, |response: Response| {
+            assert_eq!(OK, response.status);
+            assert_eq!(vec!(
+                ("Transfer-Encoding".to_string(), "chunked".to_string()),
+                ("Trailer".to_string(), "Expires".to_string()),
+            ), response.headers.vec);
+            assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
+                       response.trailers.vec);
+        });
     }
 
     #[test]
@@ -364,7 +393,7 @@ When a chunked message containing a non-empty trailer is received,
 
         let _write = stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes());
 
-        let mut client = NaughtyClient { port: server.port };
+        let mut client = MalformedChunkedEncodingClient { port: server.port };
 
         client.handle(Request::get(Uri::parse("/"), Headers::from(vec!(("Transfer-encoding" , "chunked")))), |res| {
             assert_eq!(res.status, Status::BadRequest);
@@ -394,5 +423,24 @@ When a chunked message containing a non-empty trailer is received,
         });
     }
 
-    //test that we read the body into non-chunked-encoding if it's http 1.0
+    #[test]
+    fn encode_and_decode_with_flate2(){
+        let mut bytes = Vec::new();
+        let bytestring = b"hello world my baby boo".repeat(200);
+        let mut gzip_encoder = GzEncoder::new(&bytestring[..], Compression::fast());
+        let count = gzip_encoder.read_to_end(&mut bytes).unwrap();
+
+        let mut gzip_decoder = GzDecoder::new(&bytes[..]);
+        let mut strdecod = String::new();
+        gzip_decoder.read_to_string(&mut strdecod).unwrap();
+        let original_byte_string = bytestring.iter().map(|x| *x as char).collect::<Vec<char>>();
+
+        assert_eq!(strdecod, original_byte_string.into_iter().collect::<String>());
+    }
+
+    // test that setting TE header will set the Connection: TE header also
+
+    // test that we read the body into non-chunked-encoding if it's http 1.0
+
+    // test that a proxy can undo transfer encoding but must respect content encoding
 }
