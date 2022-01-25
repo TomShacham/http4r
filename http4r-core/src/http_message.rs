@@ -517,6 +517,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             match req.body {
                 BodyString(str) => {
+
                     if has_transfer_encoding && req.version == one_pt_one() {
                         write_chunked_string(stream, request_string, str, req.trailers);
                     } else {

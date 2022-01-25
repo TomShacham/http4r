@@ -10,9 +10,10 @@ mod tests {
     use flate2::read::{GzDecoder};
     use flate2::write::DeflateDecoder;
     use http4r_core::client::Client;
+    use http4r_core::codex::Codex;
     use http4r_core::handler::Handler;
     use http4r_core::headers::{Headers, HeaderType};
-    use http4r_core::http_message::{body_string, Request, Response, Status};
+    use http4r_core::http_message::{body_string, CompressionAlgorithm, Request, Response, Status};
     use http4r_core::http_message::Body::{BodyStream, BodyString};
     use http4r_core::http_message::Status::{BadRequest, OK};
     use http4r_core::server::Server;
@@ -427,30 +428,28 @@ When a chunked message containing a non-empty trailer is received,
 
     #[test]
     fn gzip_and_deflate_encode_and_decode_with_flate2(){
-        let mut gzip_bytes = Vec::new();
         let original_string = "hello world my baby boo".repeat(200);
-        let bytestring = original_string.as_bytes();
+        let mut bytestring = original_string.as_bytes();
 
-        let mut gzip_encoder = GzEncoder::new(&bytestring[..], Compression::fast());
-        let count = gzip_encoder.read_to_end(&mut gzip_bytes).unwrap();
+        let mut gzip_encode_writer = Vec::new();
+        let mut gzip_decode_writer = Vec::new();
 
-        let mut gzip_decoder = GzDecoder::new(&gzip_bytes[..]);
-        let mut decoded = String::new();
-        gzip_decoder.read_to_string(&mut decoded).unwrap();
+        Codex::encode(&mut bytestring, &mut gzip_encode_writer, CompressionAlgorithm::GZIP);
+        assert_eq!(gzip_encode_writer.len(), 99); // much shorter than bytestring.len()
 
-        assert_eq!(decoded, original_string);
+        Codex::decode(&mut gzip_encode_writer, &mut gzip_decode_writer, CompressionAlgorithm::GZIP);
 
-        let mut deflate_bytes = Vec::new();
-        let mut deflate_encoder = DeflateEncoder::new(&bytestring[..], Compression::fast());
-        deflate_encoder.read_to_end(&mut deflate_bytes);
+        assert_eq!(gzip_decode_writer.as_slice(), bytestring);
 
-        let mut writer = Vec::new();
-        let mut deflater = DeflateDecoder::new(writer);
-        deflater.write(&deflate_bytes[..]).unwrap();
-        writer = deflater.finish().unwrap();
-        let return_string = String::from_utf8(writer).expect("String parsing error");
+        let mut deflate_encode_writer = Vec::new();
+        let mut deflate_decode_writer = Vec::new();
 
-        assert_eq!(return_string, original_string)
+        Codex::encode(&mut bytestring, &mut deflate_encode_writer, CompressionAlgorithm::DEFLATE);
+        assert_eq!(deflate_encode_writer.len(), 81); // much shorter than bytestring.len()
+
+        Codex::decode(&mut deflate_encode_writer, &mut deflate_decode_writer, CompressionAlgorithm::DEFLATE);
+
+        assert_eq!(deflate_decode_writer.as_slice(), bytestring);
     }
 
     // test that setting TE header will set the Connection: TE header also
