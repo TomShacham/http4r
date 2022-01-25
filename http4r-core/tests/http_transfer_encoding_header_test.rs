@@ -4,9 +4,11 @@ mod common;
 mod tests {
     use std::io::{Cursor, Read, Write};
     use std::net::TcpStream;
-    use flate2::bufread::GzEncoder;
+    use std::str::from_utf8;
+    use flate2::bufread::{DeflateEncoder, GzEncoder};
     use flate2::Compression;
-    use flate2::read::GzDecoder;
+    use flate2::read::{GzDecoder};
+    use flate2::write::DeflateDecoder;
     use http4r_core::client::Client;
     use http4r_core::handler::Handler;
     use http4r_core::headers::{Headers, HeaderType};
@@ -346,7 +348,7 @@ When a chunked message containing a non-empty trailer is received,
         client.handle(chunked_with_TE, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(vec!(
-                ("Transfer-Encoding".to_string(), "chunked".to_string()),
+                ("Transfer-Encoding".to_string(), "gzip, chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
@@ -424,18 +426,31 @@ When a chunked message containing a non-empty trailer is received,
     }
 
     #[test]
-    fn encode_and_decode_with_flate2(){
-        let mut bytes = Vec::new();
-        let bytestring = b"hello world my baby boo".repeat(200);
+    fn gzip_and_deflate_encode_and_decode_with_flate2(){
+        let mut gzip_bytes = Vec::new();
+        let original_string = "hello world my baby boo".repeat(200);
+        let bytestring = original_string.as_bytes();
+
         let mut gzip_encoder = GzEncoder::new(&bytestring[..], Compression::fast());
-        let count = gzip_encoder.read_to_end(&mut bytes).unwrap();
+        let count = gzip_encoder.read_to_end(&mut gzip_bytes).unwrap();
 
-        let mut gzip_decoder = GzDecoder::new(&bytes[..]);
-        let mut strdecod = String::new();
-        gzip_decoder.read_to_string(&mut strdecod).unwrap();
-        let original_byte_string = bytestring.iter().map(|x| *x as char).collect::<Vec<char>>();
+        let mut gzip_decoder = GzDecoder::new(&gzip_bytes[..]);
+        let mut decoded = String::new();
+        gzip_decoder.read_to_string(&mut decoded).unwrap();
 
-        assert_eq!(strdecod, original_byte_string.into_iter().collect::<String>());
+        assert_eq!(decoded, original_string);
+
+        let mut deflate_bytes = Vec::new();
+        let mut deflate_encoder = DeflateEncoder::new(&bytestring[..], Compression::fast());
+        deflate_encoder.read_to_end(&mut deflate_bytes);
+
+        let mut writer = Vec::new();
+        let mut deflater = DeflateDecoder::new(writer);
+        deflater.write(&deflate_bytes[..]).unwrap();
+        writer = deflater.finish().unwrap();
+        let return_string = String::from_utf8(writer).expect("String parsing error");
+
+        assert_eq!(return_string, original_string)
     }
 
     // test that setting TE header will set the Connection: TE header also

@@ -492,7 +492,6 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> ReadResult {
 pub enum CompressionAlgorithm {
     GZIP,
     DEFLATE,
-    COMPRESS,
     NONE,
 }
 
@@ -506,7 +505,6 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
             let compression = match headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")) {
                 Some(value) if value.contains("gzip") => CompressionAlgorithm::GZIP,
                 Some(value) if value.contains("deflate") => CompressionAlgorithm::DEFLATE,
-                Some(value) if value.contains("compress") => CompressionAlgorithm::COMPRESS,
                 _ => CompressionAlgorithm::NONE,
             };
 
