@@ -20,8 +20,7 @@ use std::io::{copy, Cursor, Read, Write};
 use std::net::TcpStream;
 use std::str;
 use std::str::from_utf8;
-use flate2::{Compression, GzBuilder};
-use flate2::read::GzEncoder;
+use crate::codex::Codex;
 
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
@@ -517,7 +516,6 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             match req.body {
                 BodyString(str) => {
-
                     if has_transfer_encoding && req.version == one_pt_one() {
                         write_chunked_string(stream, request_string, str, req.trailers);
                     } else {
