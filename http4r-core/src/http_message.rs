@@ -24,6 +24,7 @@ use crate::codex::Codex;
 
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
+use crate::http_message::CompressionAlgorithm::{DEFLATE, GZIP};
 use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
 use crate::http_message::Status::{BadRequest, InternalServerError, LengthRequired, MovedPermanently, NotFound, OK, Unknown};
 use crate::uri::Uri;
@@ -494,6 +495,16 @@ pub enum CompressionAlgorithm {
     NONE,
 }
 
+impl CompressionAlgorithm {
+    fn wants_compressing(&self) -> bool {
+        match self {
+            GZIP => true,
+            DEFLATE => true,
+            CompressionAlgorithm::NONE => false
+        }
+    }
+}
+
 pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
     match message {
         HttpMessage::Request(mut req) => {
@@ -501,11 +512,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
             let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, has_transfer_encoding, &req.version)
                 .unwrap_or(req.headers);
 
-            let compression = match headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")) {
-                Some(value) if value.contains("gzip") => CompressionAlgorithm::GZIP,
-                Some(value) if value.contains("deflate") => CompressionAlgorithm::DEFLATE,
-                _ => CompressionAlgorithm::NONE,
-            };
+            let compression = compression_from(&headers);
 
             let mut request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
                                              req.method.value(),
@@ -516,23 +523,19 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             match req.body {
                 BodyString(str) => {
-                    let mut body_writer = Vec::new();
-                    match compression {
-                        CompressionAlgorithm::GZIP => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::GZIP);},
-                        CompressionAlgorithm::DEFLATE => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::DEFLATE);},
-                        CompressionAlgorithm::NONE => {body_writer.write(str.as_bytes()).unwrap();},
-                    };
+                    let mut writer = Vec::new();
+                    compress(&compression, &mut writer, str.as_bytes());
 
                     if has_transfer_encoding && req.version == one_pt_one() {
-                        write_chunked_string(stream, request_string, body_writer.as_slice(), req.trailers);
+                        write_chunked_string(stream, request_string, writer.as_slice(), req.trailers);
                     } else {
-                        let body = [request_string.as_bytes(), body_writer.as_slice()].concat();
+                        let body = [request_string.as_bytes(), writer.as_slice()].concat();
                         stream.write(body.as_slice()).unwrap();
                     }
                 }
                 BodyStream(ref mut reader) => {
                     if has_transfer_encoding && req.version == one_pt_one() {
-                        write_chunked_stream(stream, reader, request_string, req.trailers);
+                        write_chunked_stream(stream, reader, request_string, req.trailers, compression);
                     } else {
                         let mut chain = request_string.as_bytes().chain(reader);
                         let _copy = copy(&mut chain, &mut stream).unwrap();
@@ -545,11 +548,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
             let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
                 .unwrap_or(res.headers);
 
-            let compression = match headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")) {
-                Some(value) if value.contains("gzip") => CompressionAlgorithm::GZIP,
-                Some(value) if value.contains("deflate") => CompressionAlgorithm::DEFLATE,
-                _ => CompressionAlgorithm::NONE,
-            };
+            let compression = compression_from(&headers);
 
             let mut status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
@@ -557,11 +556,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
             match res.body {
                 BodyString(str) => {
                     let mut body_writer = Vec::new();
-                    match compression {
-                        CompressionAlgorithm::GZIP => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::GZIP);},
-                        CompressionAlgorithm::DEFLATE => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::DEFLATE);},
-                        CompressionAlgorithm::NONE => {body_writer.write(str.as_bytes());},
-                    };
+                    compress(&compression, &mut body_writer, str.as_bytes());
 
                     if chunked_encoding_desired && res.version == one_pt_one() {
                         write_chunked_string(stream, status_and_headers, body_writer.as_slice(), res.trailers);
@@ -571,7 +566,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && res.version == one_pt_one() {
-                        write_chunked_stream(&mut stream, reader, status_and_headers, res.trailers);
+                        write_chunked_stream(&mut stream, reader, status_and_headers, res.trailers, compression);
                     } else {
                         let mut chain = status_and_headers.as_bytes().chain(reader);
                         let _copy = copy(&mut chain, &mut stream).unwrap();
@@ -579,6 +574,22 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
                 }
             }
         }
+    }
+}
+
+fn compression_from(headers: &Headers) -> CompressionAlgorithm {
+    match headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")) {
+        Some(value) if value.contains("gzip") => CompressionAlgorithm::GZIP,
+        Some(value) if value.contains("deflate") => CompressionAlgorithm::DEFLATE,
+        _ => CompressionAlgorithm::NONE,
+    }
+}
+
+fn compress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u8>, chunk: &'a [u8]) {
+    match compression {
+        CompressionAlgorithm::GZIP => { Codex::encode(chunk, &mut writer, GZIP); }
+        CompressionAlgorithm::DEFLATE => { Codex::encode(chunk, &mut writer, DEFLATE); }
+        CompressionAlgorithm::NONE => { writer.write_all(chunk); }
     }
 }
 
@@ -605,7 +616,7 @@ https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
 It is not an error if the returned value n is smaller than the buffer size, even when the reader is not at the end of the stream yet.
 This may happen for example because fewer bytes are actually available right now (e. g. being close to end-of-file) or because read() was interrupted by a signal.
  */
-pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {
+pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers, compression: CompressionAlgorithm) {
     let buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);
     let mut first_write = true;
@@ -615,7 +626,8 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
         temp.extend_from_slice(bytes_read.to_string().as_bytes());
         temp.push(b'\r');
         temp.push(b'\n');
-        temp.append(&mut buffer[..bytes_read].to_vec());
+        let chunk = &buffer[..bytes_read];
+        compress(&compression, &mut temp, chunk);
         temp.push(b'\r');
         temp.push(b'\n');
 
@@ -637,6 +649,7 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
     }
     stream.write(end.as_slice()).unwrap();
 }
+
 
 pub fn ensure_content_length_or_transfer_encoding(headers: &Headers, body: &Body, has_transfer_encoding: bool, version: &HttpVersion) -> Option<Headers> {
     let has_content_length = headers.has("Content-Length");
