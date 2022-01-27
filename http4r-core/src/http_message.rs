@@ -516,11 +516,18 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             match req.body {
                 BodyString(str) => {
+                    let mut body_writer = Vec::new();
+                    match compression {
+                        CompressionAlgorithm::GZIP => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::GZIP);},
+                        CompressionAlgorithm::DEFLATE => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::DEFLATE);},
+                        CompressionAlgorithm::NONE => {body_writer.write(str.as_bytes()).unwrap();},
+                    };
+
                     if has_transfer_encoding && req.version == one_pt_one() {
-                        write_chunked_string(stream, request_string, str, req.trailers);
+                        write_chunked_string(stream, request_string, body_writer.as_slice(), req.trailers);
                     } else {
-                        request_string.push_str(str);
-                        stream.write(request_string.as_bytes()).unwrap();
+                        let body = [request_string.as_bytes(), body_writer.as_slice()].concat();
+                        stream.write(body.as_slice()).unwrap();
                     }
                 }
                 BodyStream(ref mut reader) => {
@@ -537,19 +544,29 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
             let has_transfer_encoding = res.headers.has("Transfer-Encoding");
             let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
                 .unwrap_or(res.headers);
+
+            let compression = match headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")) {
+                Some(value) if value.contains("gzip") => CompressionAlgorithm::GZIP,
+                Some(value) if value.contains("deflate") => CompressionAlgorithm::DEFLATE,
+                _ => CompressionAlgorithm::NONE,
+            };
+
             let mut status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
 
             match res.body {
-                BodyString(body_string) => {
+                BodyString(str) => {
+                    let mut body_writer = Vec::new();
+                    match compression {
+                        CompressionAlgorithm::GZIP => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::GZIP);},
+                        CompressionAlgorithm::DEFLATE => {Codex::encode(str.as_bytes(), &mut body_writer, CompressionAlgorithm::DEFLATE);},
+                        CompressionAlgorithm::NONE => {body_writer.write(str.as_bytes());},
+                    };
+
                     if chunked_encoding_desired && res.version == one_pt_one() {
-                        write_chunked_string(stream, status_and_headers, body_string, res.trailers);
+                        write_chunked_string(stream, status_and_headers, body_writer.as_slice(), res.trailers);
                     } else {
-                        status_and_headers.push_str(body_string);
-                        stream.write(status_and_headers.as_bytes()).unwrap();
-                        if !res.trailers.is_empty() {
-                            stream.write(format!("\r\n{}\r\n\r\n", res.trailers.to_wire_string()).as_bytes()).unwrap();
-                        }
+                        stream.write([status_and_headers.as_bytes(), body_writer.as_slice()].concat().as_slice()).unwrap();
                     }
                 }
                 BodyStream(ref mut reader) => {
@@ -565,21 +582,22 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
     }
 }
 
-pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chunk: &str, trailers: Headers) {
+pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chunk: &[u8], trailers: Headers) {
     let length = chunk.len().to_string();
-    let end = "0\r\n";
 
     first_line.push_str(length.as_str());
     first_line.push_str("\r\n");
-    first_line.push_str(chunk);
-    first_line.push_str("\r\n");
-    first_line.push_str(end);
+    let mut chunk = [
+        first_line.as_bytes(),
+        chunk,
+        "\r\n0\r\n".as_bytes()
+    ].concat();
 
     if !trailers.is_empty() {
-        first_line.push_str(format!("{}\r\n\r\n", trailers.to_wire_string()).as_str());
+        chunk.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
     }
 
-    stream.write(first_line.as_bytes()).unwrap();
+    stream.write(chunk.as_slice()).unwrap();
 }
 
 /*
