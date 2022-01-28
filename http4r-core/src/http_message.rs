@@ -566,7 +566,21 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
                         write_chunked_stream(&mut stream, reader, status_and_headers, res.trailers, compression);
                     } else {
                         let mut chain = status_and_headers.as_bytes().chain(reader);
-                        let _copy = copy(&mut chain, &mut stream).unwrap();
+                        if compression.is_none() {
+                            let _copy = copy(&mut chain, &mut stream).unwrap();
+                        } else {
+                            let mut read = [0; 4096];
+                            loop {
+                                let mut writer = Vec::new();
+                                let bytes_read = chain.read(&mut read).unwrap();
+                                if bytes_read == 0 {
+                                    break;
+                                }
+                                compress(&compression, &mut writer, &read);
+                                stream.write(&writer).unwrap();
+                            }
+                        }
+
                     }
                 }
             }
