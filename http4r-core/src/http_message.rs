@@ -507,8 +507,8 @@ impl CompressionAlgorithm {
 pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
     match message {
         HttpMessage::Request(mut req) => {
-            let has_transfer_encoding = req.headers.has("Transfer-Encoding");
-            let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, has_transfer_encoding, &req.version)
+            let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
+            let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, chunked_encoding_desired, &req.version)
                 .unwrap_or(req.headers);
 
             let compression = compression_from(&headers);
@@ -522,24 +522,10 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             match req.body {
                 BodyString(str) => {
-                    let mut writer = Vec::new();
-                    compress(&compression, &mut writer, str.as_bytes());
-
-                    if has_transfer_encoding && req.version == one_pt_one() {
-                        write_chunked_string(stream, request_string, writer.as_slice(), req.trailers, compression);
-                    } else {
-                        let body = [request_string.as_bytes(), writer.as_slice()].concat();
-                        if compression.is_none() {
-                            stream.write(body.as_slice()).unwrap();
-                        } else {
-                            let mut writer = Vec::new();
-                            compress(&compression, &mut writer, str.as_bytes());
-                            stream.write(&writer).unwrap();
-                        }
-                    }
+                    write_body_string(stream, compression, request_string, chunked_encoding_desired, str, req.version == one_pt_one(), req.trailers)
                 }
                 BodyStream(ref mut reader) => {
-                    if has_transfer_encoding && req.version == one_pt_one() {
+                    if chunked_encoding_desired && req.version == one_pt_one() {
                         write_chunked_stream(stream, reader, request_string, req.trailers, compression);
                     } else {
                         let mut chain = request_string.as_bytes().chain(reader);
@@ -573,14 +559,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             match res.body {
                 BodyString(str) => {
-                    let mut body_writer = Vec::new();
-                    compress(&compression, &mut body_writer, str.as_bytes());
-
-                    if chunked_encoding_desired && res.version == one_pt_one() {
-                        write_chunked_string(stream, status_and_headers, body_writer.as_slice(), res.trailers, compression);
-                    } else {
-                        stream.write([status_and_headers.as_bytes(), body_writer.as_slice()].concat().as_slice()).unwrap();
-                    }
+                    write_body_string(stream, compression, status_and_headers, chunked_encoding_desired, str, res.version == one_pt_one(), res.trailers)
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && res.version == one_pt_one() {
@@ -591,6 +570,21 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
                     }
                 }
             }
+        }
+    }
+}
+
+fn write_body_string(mut stream: &mut TcpStream, compression: CompressionAlgorithm, mut status_and_headers: String, chunked_encoding_desired: bool, body: &str, is_version_1_1: bool, trailers: Headers) {
+    if chunked_encoding_desired && is_version_1_1 {
+        write_chunked_string(stream, status_and_headers, body.as_bytes(), trailers, compression);
+    } else {
+        let x = [status_and_headers.as_bytes(), body.as_bytes()].concat();
+        if compression.is_none() {
+            stream.write(x.as_slice()).unwrap();
+        } else {
+            let mut writer = Vec::new();
+            compress(&compression, &mut writer, body.as_bytes());
+            stream.write(&writer).unwrap();
         }
     }
 }
