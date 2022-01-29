@@ -103,6 +103,7 @@ If you are using this software for profit, please donate.".trim());
                 write_body(&mut stream, HttpMessage::Response(response));
             }
             Ok(HttpMessage::Request(request)) => {
+                let request_accept_encoding = Self::most_desired_encoding(request.headers.get("TE"));
                 let mut h = handler().unwrap();
                 h.handle(request, |response| {
                     write_body(&mut stream, HttpMessage::Response(response));
@@ -114,5 +115,29 @@ If you are using this software for profit, please donate.".trim());
         };
 
         stream.flush().unwrap();
+    }
+
+    // something like gzip;q=0.9, deflate;q=0.8
+    fn most_desired_encoding(str: Option<String>) -> Option<String> {
+        str.map(|v| {
+            let mut ranked = v.split(", ")
+                .map(|p| {
+                    let pair = p.split(";").map(|it| it.to_string()).collect::<Vec<String>>();
+                    if pair.len() > 1 {
+                        let rank = pair[1].split("=").map(|it| it.to_string()).collect::<Vec<String>>();
+                        if rank.len() > 1 {
+                            Some((pair[0].clone(), rank[1].clone()))
+                        } else { None }
+                    } else { None }
+                })
+                .filter(|p| p.is_some())
+                .map(|x| x.unwrap())
+                .filter(|y| vec!("gzip", "deflate").contains(&y.0.as_str()))
+                .collect::<Vec<(String, String)>>();
+
+            ranked.sort_by(|x, y| x.1.parse::<f32>().unwrap().partial_cmp(&y.1.parse::<f32>().unwrap()).unwrap());
+            ranked.reverse();
+            ranked.first().map(|x| x.0.clone())
+        }).unwrap()
     }
 }
