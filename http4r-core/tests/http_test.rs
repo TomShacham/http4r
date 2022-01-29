@@ -6,7 +6,6 @@ mod common;
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::io::{Read, repeat};
     use http4r_core::client::{Client};
     use http4r_core::headers::Headers;
     use http4r_core::http_message::{body_string, Request, Response};

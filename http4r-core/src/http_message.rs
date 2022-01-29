@@ -16,7 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::io::{copy, Cursor, Read, Write};
+use std::io::{copy, Read, Write};
 use std::net::TcpStream;
 use std::str;
 use std::str::from_utf8;
@@ -513,7 +513,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             let compression = compression_from(&headers);
 
-            let mut request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
+            let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
                                              req.method.value(),
                                              req.uri.to_string(),
                                              req.version.major,
@@ -554,7 +554,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
 
             let compression = compression_from(&headers);
 
-            let mut status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
+            let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
 
             match res.body {
@@ -580,7 +580,6 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
                                 stream.write(&writer).unwrap();
                             }
                         }
-
                     }
                 }
             }
@@ -588,7 +587,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
     }
 }
 
-fn write_body_string(mut stream: &mut TcpStream, compression: CompressionAlgorithm, mut status_and_headers: String, chunked_encoding_desired: bool, body: &str, is_version_1_1: bool, trailers: Headers) {
+fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, status_and_headers: String, chunked_encoding_desired: bool, body: &str, is_version_1_1: bool, trailers: Headers) {
     if chunked_encoding_desired && is_version_1_1 {
         write_chunked_string(stream, status_and_headers, body.as_bytes(), trailers, compression);
     } else {
@@ -615,7 +614,7 @@ fn compress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u
     match compression {
         CompressionAlgorithm::GZIP => { Codex::encode(chunk, &mut writer, GZIP); }
         CompressionAlgorithm::DEFLATE => { Codex::encode(chunk, &mut writer, DEFLATE); }
-        CompressionAlgorithm::NONE => { writer.write_all(chunk); }
+        CompressionAlgorithm::NONE => { writer.write_all(chunk).unwrap(); }
     }
 }
 

@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message;
-use crate::http_message::{CompressionAlgorithm, HttpMessage, message_from, Request, Response, with_content_length, write_body};
+use crate::http_message::{HttpMessage, message_from, Request, Response, with_content_length, write_body};
 use crate::http_message::Body::{BodyString};
 
 impl Client {

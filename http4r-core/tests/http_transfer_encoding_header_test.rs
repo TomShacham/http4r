@@ -2,13 +2,8 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Read, Write};
+    use std::io::{Cursor, Write};
     use std::net::TcpStream;
-    use std::str::from_utf8;
-    use flate2::bufread::{DeflateEncoder, GzEncoder};
-    use flate2::Compression;
-    use flate2::read::{GzDecoder};
-    use flate2::write::DeflateDecoder;
     use http4r_core::client::Client;
     use http4r_core::codex::Codex;
     use http4r_core::handler::Handler;
