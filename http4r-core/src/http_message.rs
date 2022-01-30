@@ -504,7 +504,7 @@ impl CompressionAlgorithm {
     }
 }
 
-pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
+pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage, option: Option<Option<String>>) {
     match message {
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
@@ -553,6 +553,7 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage) {
                 .unwrap_or(res.headers);
 
             let compression = compression_from(&headers);
+            let compression = if compression.is_none() { compression_from(Headers::from())}
 
             let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");

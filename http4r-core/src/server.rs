@@ -96,21 +96,21 @@ If you are using this software for profit, please donate.".trim());
             | Err(MessageError::InvalidBoundaryDigit(msg))
             => {
                 let response = Response::bad_request(Headers::empty(), BodyString(msg.as_str()));
-                write_body(&mut stream, HttpMessage::Response(response));
+                write_body(&mut stream, HttpMessage::Response(response), None);
             }
             Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
                 let response = Response::length_required(Headers::empty(), BodyString(msg.as_str()));
-                write_body(&mut stream, HttpMessage::Response(response));
+                write_body(&mut stream, HttpMessage::Response(response), None);
             }
             Ok(HttpMessage::Request(request)) => {
                 let request_accept_encoding = Self::most_desired_encoding(request.headers.get("TE"));
                 let mut h = handler().unwrap();
                 h.handle(request, |response| {
-                    write_body(&mut stream, HttpMessage::Response(response));
+                    write_body(&mut stream, HttpMessage::Response(response), Some(request_accept_encoding));
                 });
             }
             Ok(HttpMessage::Response(response)) => {
-                write_body(&mut stream, HttpMessage::Response(response));
+                write_body(&mut stream, HttpMessage::Response(response), None);
             }
         };
 
