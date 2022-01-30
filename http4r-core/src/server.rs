@@ -106,7 +106,7 @@ If you are using this software for profit, please donate.".trim());
                 let request_accept_encoding = Self::most_desired_encoding(request.headers.get("TE"));
                 let mut h = handler().unwrap();
                 h.handle(request, |response| {
-                    write_body(&mut stream, HttpMessage::Response(response), Some(request_accept_encoding));
+                    write_body(&mut stream, HttpMessage::Response(response), request_accept_encoding);
                 });
             }
             Ok(HttpMessage::Response(response)) => {

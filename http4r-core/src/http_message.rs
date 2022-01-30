@@ -504,21 +504,22 @@ impl CompressionAlgorithm {
     }
 }
 
-pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage, option: Option<Option<String>>) {
+#[allow(non_snake_case)]
+pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage, desired_compression_from_request_TE_header: Option<String>) {
     match message {
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
             let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, chunked_encoding_desired, &req.version)
                 .unwrap_or(req.headers);
 
-            let compression = compression_from(&headers);
+            let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
 
             let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
-                                             req.method.value(),
-                                             req.uri.to_string(),
-                                             req.version.major,
-                                             req.version.minor,
-                                             headers.to_wire_string());
+                                         req.method.value(),
+                                         req.uri.to_string(),
+                                         req.version.major,
+                                         req.version.minor,
+                                         headers.to_wire_string());
 
             match req.body {
                 BodyString(str) => {
@@ -552,8 +553,10 @@ pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage, option: Opti
             let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
                 .unwrap_or(res.headers);
 
-            let compression = compression_from(&headers);
-            let compression = if compression.is_none() { compression_from(Headers::from())}
+            let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
+            let compression = if compression.is_none() && desired_compression_from_request_TE_header.is_some() {
+                compression_from(desired_compression_from_request_TE_header)
+            } else { compression };
 
             let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
@@ -603,8 +606,8 @@ fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, 
     }
 }
 
-fn compression_from(headers: &Headers) -> CompressionAlgorithm {
-    match headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")) {
+fn compression_from(option: Option<String>) -> CompressionAlgorithm {
+    match option {
         Some(value) if value.contains("gzip") => CompressionAlgorithm::GZIP,
         Some(value) if value.contains("deflate") => CompressionAlgorithm::DEFLATE,
         _ => CompressionAlgorithm::NONE,
