@@ -505,7 +505,7 @@ impl CompressionAlgorithm {
 }
 
 #[allow(non_snake_case)]
-pub fn write_body(mut stream: &mut TcpStream, message: HttpMessage, desired_compression_from_request_TE_header: Option<String>) {
+pub fn write_message(mut stream: &mut TcpStream, message: HttpMessage, desired_compression_from_request_TE_header: Option<String>) {
     match message {
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
@@ -595,11 +595,12 @@ fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, 
     if chunked_encoding_desired && is_version_1_1 {
         write_chunked_string(stream, status_and_headers, body.as_bytes(), trailers, compression);
     } else {
-        let x = [status_and_headers.as_bytes(), body.as_bytes()].concat();
+        let status_headers_and_body = [status_and_headers.as_bytes(), body.as_bytes()].concat();
         if compression.is_none() {
-            stream.write(x.as_slice()).unwrap();
+            stream.write(status_headers_and_body.as_slice()).unwrap();
         } else {
             let mut writer = Vec::new();
+            writer.extend_from_slice(status_and_headers.as_bytes());
             compress(&compression, &mut writer, body.as_bytes());
             stream.write(&writer).unwrap();
         }

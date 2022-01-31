@@ -4,7 +4,7 @@ use std::io::{Write};
 use std::sync::Arc;
 use crate::handler::Handler;
 use crate::headers::Headers;
-use crate::http_message::{HttpMessage, message_from, MessageError, Response, write_body};
+use crate::http_message::{HttpMessage, message_from, MessageError, Response, write_message};
 use crate::http_message::Body::{BodyString};
 use crate::pool::ThreadPool;
 
@@ -96,21 +96,21 @@ If you are using this software for profit, please donate.".trim());
             | Err(MessageError::InvalidBoundaryDigit(msg))
             => {
                 let response = Response::bad_request(Headers::empty(), BodyString(msg.as_str()));
-                write_body(&mut stream, HttpMessage::Response(response), None);
+                write_message(&mut stream, HttpMessage::Response(response), None);
             }
             Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
                 let response = Response::length_required(Headers::empty(), BodyString(msg.as_str()));
-                write_body(&mut stream, HttpMessage::Response(response), None);
+                write_message(&mut stream, HttpMessage::Response(response), None);
             }
             Ok(HttpMessage::Request(request)) => {
                 let request_accept_encoding = Self::most_desired_encoding(request.headers.get("TE"));
                 let mut h = handler().unwrap();
                 h.handle(request, |response| {
-                    write_body(&mut stream, HttpMessage::Response(response), request_accept_encoding);
+                    write_message(&mut stream, HttpMessage::Response(response), request_accept_encoding);
                 });
             }
             Ok(HttpMessage::Response(response)) => {
-                write_body(&mut stream, HttpMessage::Response(response), None);
+                write_message(&mut stream, HttpMessage::Response(response), None);
             }
         };
 
@@ -138,6 +138,6 @@ If you are using this software for profit, please donate.".trim());
             ranked.sort_by(|x, y| x.1.parse::<f32>().unwrap().partial_cmp(&y.1.parse::<f32>().unwrap()).unwrap());
             ranked.reverse();
             ranked.first().map(|x| x.0.clone())
-        }).unwrap()
+        }).unwrap_or(None)
     }
 }

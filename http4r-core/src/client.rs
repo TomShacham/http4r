@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message;
-use crate::http_message::{HttpMessage, message_from, Request, Response, with_content_length, write_body};
+use crate::http_message::{HttpMessage, message_from, Request, Response, with_content_length, write_message};
 use crate::http_message::Body::{BodyString};
 
 impl Client {
@@ -26,7 +26,7 @@ impl Handler for Client {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
 
-        write_body(&mut stream, HttpMessage::Request(req), None);
+        write_message(&mut stream, HttpMessage::Request(req), None);
 
         let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_vec = Vec::with_capacity(1048576);
