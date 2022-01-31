@@ -659,13 +659,27 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
 
     while bytes_read > 0 {
         let mut temp = vec!();
-        temp.extend_from_slice(bytes_read.to_string().as_bytes());
-        temp.push(b'\r');
-        temp.push(b'\n');
-        let chunk = &buffer[..bytes_read];
-        compress(&compression, &mut temp, chunk);
-        temp.push(b'\r');
-        temp.push(b'\n');
+        if compression.is_none() {
+            temp.extend_from_slice(bytes_read.to_string().as_bytes());
+            temp.push(b'\r');
+            temp.push(b'\n');
+            let chunk = &buffer[..bytes_read];
+            temp.extend_from_slice(chunk);
+            temp.push(b'\r');
+            temp.push(b'\n');
+        } else {
+            let chunk = &buffer[..bytes_read];
+            compress(&compression, &mut temp, chunk);
+            let compressed_length = temp.len().to_string();
+            let reversed = compressed_length.chars().rev().collect::<String>();
+            temp.insert(0, b'\n'); temp.insert(0, b'\r');
+            for byte in reversed.as_bytes() {
+                temp.insert(0, *byte)
+            }
+            temp.push(b'\r');
+            temp.push(b'\n');
+        }
+
 
         // write to wire
         if first_write {
