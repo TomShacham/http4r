@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message;
-use crate::http_message::{HttpMessage, message_from, Request, Response, with_content_length, write_message};
+use crate::http_message::{HttpMessage, read_message_from_wire, Request, RequestOptions, Response, with_content_length, write_message_to_wire};
 use crate::http_message::Body::{BodyString};
 
 impl Client {
@@ -26,14 +26,16 @@ impl Handler for Client {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
 
-        write_message(&mut stream, HttpMessage::Request(req), None);
+        let headers = Headers::from_headers(&(req.headers));
+        let request_options = Some(RequestOptions::from(&headers));
+        write_message_to_wire(&mut stream, HttpMessage::Request(req), request_options);
 
         let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_vec = Vec::with_capacity(1048576);
         let mut start_line_writer = Vec::with_capacity(16384);
         let mut headers_writer = Vec::with_capacity(16384);
         let mut trailers_writer = Vec::with_capacity(16384);
-        let result = message_from(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut chunks_vec, &mut trailers_writer);
+        let result = read_message_from_wire(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut chunks_vec, &mut trailers_writer, request_options);
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,

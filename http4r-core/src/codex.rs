@@ -21,7 +21,7 @@ impl Codex {
         }
     }
 
-    pub fn decode(reader: &mut [u8], mut writer: &mut Vec<u8>, compression: CompressionAlgorithm) {
+    pub fn decode(reader: &mut [u8], mut writer: &mut Vec<u8>, compression: &CompressionAlgorithm) {
         match compression {
             CompressionAlgorithm::GZIP => {
                 let mut gzip_decoder = GzDecoder::new(&reader[..]);

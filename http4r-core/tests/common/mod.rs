@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use http4r_core::handler::Handler;
 use http4r_core::headers::Headers;
 use http4r_core::http_message;
-use http4r_core::http_message::{Body, message_from, Request, Response};
+use http4r_core::http_message::{Body, read_message_from_wire, Request, Response};
 use http4r_core::http_message::Body::BodyString;
 
 pub struct Router {}
@@ -44,7 +44,7 @@ impl Handler for MalformedChunkedEncodingClient {
         let mut start_line_writer = Vec::with_capacity(16384);
         let mut headers_writer = Vec::with_capacity(16384);
         let mut trailers_writer = Vec::with_capacity(16384);
-        let result = message_from(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut chunks_vec, &mut trailers_writer);
+        let result = read_message_from_wire(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut chunks_vec, &mut trailers_writer, None);
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,

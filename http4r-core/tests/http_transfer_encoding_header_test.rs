@@ -349,6 +349,7 @@ When a chunked message containing a non-empty trailer is received,
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
                        response.trailers.vec);
+            assert_eq!(body_string(response.body), "".to_string());
         });
     }
 
@@ -432,7 +433,7 @@ When a chunked message containing a non-empty trailer is received,
         Codex::encode(&mut bytestring, &mut gzip_encode_writer, CompressionAlgorithm::GZIP);
         assert_eq!(gzip_encode_writer.len(), 99); // much shorter than bytestring.len()
 
-        Codex::decode(&mut gzip_encode_writer, &mut gzip_decode_writer, CompressionAlgorithm::GZIP);
+        Codex::decode(&mut gzip_encode_writer, &mut gzip_decode_writer, &CompressionAlgorithm::GZIP);
 
         assert_eq!(gzip_decode_writer.as_slice(), bytestring);
 
@@ -442,10 +443,12 @@ When a chunked message containing a non-empty trailer is received,
         Codex::encode(&mut bytestring, &mut deflate_encode_writer, CompressionAlgorithm::DEFLATE);
         assert_eq!(deflate_encode_writer.len(), 81); // much shorter than bytestring.len()
 
-        Codex::decode(&mut deflate_encode_writer, &mut deflate_decode_writer, CompressionAlgorithm::DEFLATE);
+        Codex::decode(&mut deflate_encode_writer, &mut deflate_decode_writer, &CompressionAlgorithm::DEFLATE);
 
         assert_eq!(deflate_decode_writer.as_slice(), bytestring);
     }
+
+    // test that we remove all things in Connection header eg TE
 
     // test that setting TE header will set the Connection: TE header also
 

@@ -24,7 +24,7 @@ use crate::codex::Codex;
 
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
-use crate::http_message::CompressionAlgorithm::{DEFLATE, GZIP};
+use crate::http_message::CompressionAlgorithm::{DEFLATE, GZIP, NONE};
 use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
 use crate::http_message::Status::{BadRequest, InternalServerError, LengthRequired, MovedPermanently, NotFound, OK, Unknown};
 use crate::uri::Uri;
@@ -64,17 +64,19 @@ impl<'a> HttpMessage<'a> {
 }
 
 #[allow(unused_assignments)]
-pub fn message_from<'a>(
+pub fn read_message_from_wire<'a>(
     mut stream: TcpStream,
     mut reader: &'a mut [u8],
     mut start_line_writer: &'a mut Vec<u8>,
     mut headers_writer: &'a mut Vec<u8>,
     chunks_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
+    request_options: Option<RequestOptions>,
 ) -> Result<HttpMessage<'a>, MessageError> {
+    let requsted_compression = request_options.map(|o| o.desired_compression);
     let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
-        read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None,
-             |reader, writer, _| { start_line_(reader, writer) },
+        read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None, requsted_compression.unwrap_or(NONE),
+             |reader, writer, _, _ | { start_line_(reader, writer) },
         );
     let start_line = str::from_utf8(start_line_writer).unwrap().split(" ").collect::<Vec<&str>>();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
@@ -82,8 +84,8 @@ pub fn message_from<'a>(
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
     (read_bytes_from_stream, up_to_in_reader, result) =
-        read(&mut stream, &mut reader, &mut headers_writer, read_bytes_from_stream, up_to_in_reader, None,
-             |reader, writer, _| { headers_(reader, writer) },
+        read(&mut stream, &mut reader, &mut headers_writer, read_bytes_from_stream, up_to_in_reader, None, requsted_compression.unwrap_or(NONE),
+             |reader, writer, _, _ | { headers_(reader, writer) },
         );
 
     if result.is_err() {
@@ -91,6 +93,10 @@ pub fn message_from<'a>(
     }
     let header_string = from_utf8(headers_writer.as_slice()).unwrap();
     let mut headers = Headers::parse_from(header_string);
+
+    let request_options = if request_options.is_some() {
+        request_options
+    } else { Some(RequestOptions::from(&headers)) };
 
     if let Err(e) = check_valid_content_length_or_transfer_encoding(&headers, is_response, method_can_have_body) {
         return Err(e);
@@ -100,6 +106,8 @@ pub fn message_from<'a>(
         headers = headers.remove("Content-Length");
     }
     let is_version_1_0 = part3 == "HTTP/1.0";
+    let wants_trailers = request_options.map(|x| x.wants_trailers).unwrap_or(false);
+
     let result = body_from(
         &mut reader[..],
         stream.try_clone().unwrap(),
@@ -113,6 +121,8 @@ pub fn message_from<'a>(
         method_can_have_body,
         headers.content_length_header(),
         transfer_encoding,
+        wants_trailers,
+        request_options.unwrap().desired_compression
     );
     if result.is_err() {
         return Err(result.err().unwrap());
@@ -193,13 +203,14 @@ fn read(
     mut read_bytes_from_stream: usize,
     mut up_to_in_reader: usize,
     mut metadata: Option<ReadMetadata>,
-    fun: fn(&mut [u8], &mut Vec<u8>, Option<ReadMetadata>) -> ReadResult,
+    compression: CompressionAlgorithm,
+    fun: fn(&mut [u8], &mut Vec<u8>, Option<ReadMetadata>, CompressionAlgorithm) -> ReadResult,
 ) -> (usize, usize, ReadResult) {
     let mut finished = false;
     let mut result = ReadResult::Err(MessageError::HeadersTooBig("".to_string()));
     while !finished {
         if up_to_in_reader > 0 {
-            result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer, metadata);
+            result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer, metadata, compression);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
@@ -218,7 +229,7 @@ fn read(
             if finished { break; }
         } else {
             read_bytes_from_stream = stream.read(&mut reader).unwrap();
-            result = fun(&mut reader[..read_bytes_from_stream], writer, metadata);
+            result = fun(&mut reader[..read_bytes_from_stream], writer, metadata, compression);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
@@ -264,12 +275,14 @@ fn body_from<'a>(
     is_request: bool,
     method_can_have_body: bool,
     content_length: Option<Result<usize, String>>,
-    transfer_encoding: Option<String>) -> Result<(Body<'a>, Headers, Headers), MessageError> {
+    transfer_encoding: Option<String>,
+    wants_trailers: bool,
+    compression: CompressionAlgorithm
+) -> Result<(Body<'a>, Headers, Headers), MessageError> {
     let body;
     let mut trailers = Headers::empty();
     let mut headers = Headers::from_headers(existing_headers);
     let expected_trailers = headers.get("Trailer");
-    let happy_to_receive_trailers = headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false);
     let cleansed_trailers = expected_trailers
         .map(|ts| ts.split(", ")
             .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
@@ -279,9 +292,9 @@ fn body_from<'a>(
 
     if let Some(_encoding) = transfer_encoding {
         let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
-        let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) = read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
+        let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) = read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, compression, |reader, writer, metadata, compression| {
             let meta = metadata.unwrap().to_chunked_metadata();
-            body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size)
+            body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size, compression)
         });
         if result.is_err() {
             return Err(result.err());
@@ -290,7 +303,7 @@ fn body_from<'a>(
 
         let more_bytes_to_read_after_body = up_to_in_reader < read_bytes_from_stream;
         if more_bytes_to_read_after_body {
-            (read_bytes_from_stream, up_to_in_reader, result) = read(&mut stream, reader, trailers_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, _| {
+            (read_bytes_from_stream, up_to_in_reader, result) = read(&mut stream, reader, trailers_writer, read_bytes_from_stream, up_to_in_reader, metadata, compression,|reader, writer, _metadata, _compression| {
                 trailers_(reader, writer)
             });
         }
@@ -300,7 +313,7 @@ fn body_from<'a>(
         let trailer_string = from_utf8(trailers_writer.as_slice()).unwrap();
         trailers = Headers::parse_from(trailer_string);
 
-        if !happy_to_receive_trailers {
+        if !wants_trailers {
             let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
             headers = headers.add_all(trailers.filter(as_str));
             trailers = Headers::empty();
@@ -339,7 +352,7 @@ fn body_from<'a>(
     Ok((body, headers, trailers))
 }
 
-fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize) -> ReadResult {
+fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize, compression: CompressionAlgorithm) -> ReadResult {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut chunk_size: usize = this_chunk_size;
     let mut bytes_of_this_chunk_read_previously = read_up_to;
@@ -394,6 +407,10 @@ fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up
             }
             continue;
         }
+    }
+
+    if compression.is_some() {
+
     }
 
     //todo() start of trailers also needed ??
@@ -489,6 +506,7 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> ReadResult {
     ReadResult::Ok((finished, 0, None))
 }
 
+#[derive(Copy, Clone)]
 pub enum CompressionAlgorithm {
     GZIP,
     DEFLATE,
@@ -496,16 +514,36 @@ pub enum CompressionAlgorithm {
 }
 
 impl CompressionAlgorithm {
-    fn is_none(&self) -> bool {
+    pub fn is_none(&self) -> bool {
         match self {
             CompressionAlgorithm::NONE => true,
             _ => false
         }
     }
+
+    pub fn is_some(&self) -> bool {
+        !self.is_none()
+    }
+
+    pub fn from(str: String) -> CompressionAlgorithm {
+        match str {
+            str if str.contains("gzip") => GZIP,
+            str if str.contains("deflate") => DEFLATE,
+            _ => NONE
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            GZIP => "gzip".to_string(),
+            DEFLATE => "deflate".to_string(),
+            CompressionAlgorithm::NONE => "".to_string()
+        }
+    }
 }
 
 #[allow(non_snake_case)]
-pub fn write_message(mut stream: &mut TcpStream, message: HttpMessage, desired_compression_from_request_TE_header: Option<String>) {
+pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, request_options: Option<RequestOptions>) {
     match message {
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
@@ -554,9 +592,16 @@ pub fn write_message(mut stream: &mut TcpStream, message: HttpMessage, desired_c
                 .unwrap_or(res.headers);
 
             let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
-            let compression = if compression.is_none() && desired_compression_from_request_TE_header.is_some() {
-                compression_from(desired_compression_from_request_TE_header)
+            let compression = if compression.is_none() && request_options.is_some() {
+                request_options.unwrap().desired_compression
             } else { compression };
+            let headers = if headers.has("TE") {
+                headers.remove("TE")
+            } else { headers };
+            let headers = if !compression.is_none() && headers.has("Transfer-Encoding") {
+                headers.replace(("Transfer-Encoding", format!("{}, chunked", compression.to_string()).as_str()))
+            } else { headers };
+            let headers = headers.remove("Connection");
 
             let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
@@ -620,6 +665,13 @@ fn compress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u
         CompressionAlgorithm::GZIP => { Codex::encode(chunk, &mut writer, GZIP); }
         CompressionAlgorithm::DEFLATE => { Codex::encode(chunk, &mut writer, DEFLATE); }
         CompressionAlgorithm::NONE => { writer.write_all(chunk).unwrap(); }
+    }
+}
+
+fn decompress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u8>, reader: &'a mut Vec<u8>) {
+    match compression {
+        GZIP | DEFLATE => { Codex::decode(reader, writer, compression); }
+        NONE => {writer.write_all(reader).unwrap(); }
     }
 }
 
@@ -712,6 +764,31 @@ pub fn ensure_content_length_or_transfer_encoding(headers: &Headers, body: &Body
         None
     }
 }
+
+// something like gzip;q=0.9, deflate;q=0.8
+pub fn most_desired_encoding(str: Option<String>) -> Option<String> {
+    str.map(|v| {
+        let mut ranked = v.split(", ")
+            .map(|p| {
+                let pair = p.split(";").map(|it| it.to_string()).collect::<Vec<String>>();
+                if pair.len() > 1 {
+                    let rank = pair[1].split("=").map(|it| it.to_string()).collect::<Vec<String>>();
+                    if rank.len() > 1 {
+                        Some((pair[0].clone(), rank[1].clone()))
+                    } else { None }
+                } else { None }
+            })
+            .filter(|p| p.is_some())
+            .map(|x| x.unwrap())
+            .filter(|y| vec!("gzip", "deflate").contains(&y.0.as_str()))
+            .collect::<Vec<(String, String)>>();
+
+        ranked.sort_by(|x, y| x.1.parse::<f32>().unwrap().partial_cmp(&y.1.parse::<f32>().unwrap()).unwrap());
+        ranked.reverse();
+        ranked.first().map(|x| x.0.clone())
+    }).unwrap_or(None)
+}
+
 
 fn http_version_from(str: &str) -> (u8, u8) {
     let mut version_chars = str.chars();
@@ -892,6 +969,30 @@ pub fn body_string(mut body: Body) -> String {
         }
     }
 }
+
+#[derive(Copy, Clone)]
+pub struct RequestOptions {
+    pub desired_compression: CompressionAlgorithm,
+    pub wants_trailers: bool
+}
+
+#[allow(non_snake_case)]
+impl RequestOptions {
+    pub fn from(headers: &Headers) -> RequestOptions {
+        let mut compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
+        if compression.is_none()  {
+            let TE_header = headers.get("TE");
+            let mut desired_encoding = most_desired_encoding(TE_header);
+            let str = desired_encoding.get_or_insert("none".to_string());
+            compression = CompressionAlgorithm::from(str.to_string());
+        }
+        RequestOptions {
+            desired_compression: compression,
+            wants_trailers: headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false)
+        }
+    }
+}
+
 
 #[derive(PartialEq, Debug)]
 pub enum Method {

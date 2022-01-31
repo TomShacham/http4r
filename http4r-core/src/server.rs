@@ -4,7 +4,7 @@ use std::io::{Write};
 use std::sync::Arc;
 use crate::handler::Handler;
 use crate::headers::Headers;
-use crate::http_message::{HttpMessage, message_from, MessageError, Response, write_message};
+use crate::http_message::{CompressionAlgorithm, HttpMessage, read_message_from_wire, MessageError, most_desired_encoding, RequestOptions, Response, write_message_to_wire};
 use crate::http_message::Body::{BodyString};
 use crate::pool::ThreadPool;
 
@@ -79,13 +79,14 @@ If you are using this software for profit, please donate.".trim());
         let mut headers_writer = Vec::with_capacity(16384);
         let mut trailers_writer = Vec::with_capacity(16384);
 
-        let result = message_from(
+        let result = read_message_from_wire(
             stream.try_clone().unwrap(),
             &mut reader,
             &mut chunks_vec,
             &mut start_line_writer,
             &mut trailers_writer,
             &mut headers_writer,
+            None,
         );
 
         match result {
@@ -96,48 +97,25 @@ If you are using this software for profit, please donate.".trim());
             | Err(MessageError::InvalidBoundaryDigit(msg))
             => {
                 let response = Response::bad_request(Headers::empty(), BodyString(msg.as_str()));
-                write_message(&mut stream, HttpMessage::Response(response), None);
+                write_message_to_wire(&mut stream, HttpMessage::Response(response), None);
             }
             Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
                 let response = Response::length_required(Headers::empty(), BodyString(msg.as_str()));
-                write_message(&mut stream, HttpMessage::Response(response), None);
+                write_message_to_wire(&mut stream, HttpMessage::Response(response), None);
             }
             Ok(HttpMessage::Request(request)) => {
-                let request_accept_encoding = Self::most_desired_encoding(request.headers.get("TE"));
+                let options = RequestOptions::from(&(request.headers));
                 let mut h = handler().unwrap();
                 h.handle(request, |response| {
-                    write_message(&mut stream, HttpMessage::Response(response), request_accept_encoding);
+                    write_message_to_wire(&mut stream, HttpMessage::Response(response), Some(options));
                 });
             }
             Ok(HttpMessage::Response(response)) => {
-                write_message(&mut stream, HttpMessage::Response(response), None);
+                write_message_to_wire(&mut stream, HttpMessage::Response(response), None);
             }
         };
 
         stream.flush().unwrap();
     }
 
-    // something like gzip;q=0.9, deflate;q=0.8
-    fn most_desired_encoding(str: Option<String>) -> Option<String> {
-        str.map(|v| {
-            let mut ranked = v.split(", ")
-                .map(|p| {
-                    let pair = p.split(";").map(|it| it.to_string()).collect::<Vec<String>>();
-                    if pair.len() > 1 {
-                        let rank = pair[1].split("=").map(|it| it.to_string()).collect::<Vec<String>>();
-                        if rank.len() > 1 {
-                            Some((pair[0].clone(), rank[1].clone()))
-                        } else { None }
-                    } else { None }
-                })
-                .filter(|p| p.is_some())
-                .map(|x| x.unwrap())
-                .filter(|y| vec!("gzip", "deflate").contains(&y.0.as_str()))
-                .collect::<Vec<(String, String)>>();
-
-            ranked.sort_by(|x, y| x.1.parse::<f32>().unwrap().partial_cmp(&y.1.parse::<f32>().unwrap()).unwrap());
-            ranked.reverse();
-            ranked.first().map(|x| x.0.clone())
-        }).unwrap_or(None)
-    }
 }
