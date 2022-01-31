@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use crate::http_message::CompressionAlgorithm;
 use flate2::bufread::{DeflateEncoder, GzEncoder};
-use flate2::Compression;
+use flate2::{Compression, GzBuilder};
 use flate2::read::{GzDecoder};
 use flate2::write::DeflateDecoder;
 

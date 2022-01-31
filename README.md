@@ -48,8 +48,11 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
     - read and write to database
 ---
 - core api
+  - How do we streaming gzip? Do we need to read the whole thing and then compress or can we do it in chunks :/ 
   - message_from to decompress if there is a compressed body 
-  - limits on headers and body etc tests 
+  - split out body_from into chunked_body_from and body_from rather than doing both in body_from
+  - client tests for compressing req/res
+  - limits on headers and body etc tests // sort out these vecs that are being allocated
   - do we want to drop connections in stream.incoming() or do we want to hang onto them for a while
   - if version is known to be 1.0 then do not send chunked message
     - stream into memory and forward as content-length 

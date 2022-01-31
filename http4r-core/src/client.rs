@@ -31,11 +31,22 @@ impl Handler for Client {
         write_message_to_wire(&mut stream, HttpMessage::Request(req), request_options);
 
         let mut reader: &mut [u8] = &mut [0; 4096];
-        let mut chunks_vec = Vec::with_capacity(1048576);
+        let mut chunks_writer = Vec::with_capacity(1048576);
+        let mut compress_writer = Vec::with_capacity(1048576);
         let mut start_line_writer = Vec::with_capacity(16384);
         let mut headers_writer = Vec::with_capacity(16384);
         let mut trailers_writer = Vec::with_capacity(16384);
-        let result = read_message_from_wire(stream.try_clone().unwrap(), &mut reader, &mut start_line_writer, &mut headers_writer, &mut chunks_vec, &mut trailers_writer, request_options);
+
+        let result = read_message_from_wire(
+            stream.try_clone().unwrap(),
+            &mut reader,
+            &mut start_line_writer,
+            &mut headers_writer,
+            &mut chunks_writer,
+            &mut compress_writer,
+            &mut trailers_writer,
+            request_options
+        );
 
         let response = match result {
             Ok(http_message::HttpMessage::Response(res)) => res,

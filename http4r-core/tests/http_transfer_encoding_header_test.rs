@@ -349,7 +349,7 @@ When a chunked message containing a non-empty trailer is received,
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
                        response.trailers.vec);
-            assert_eq!(body_string(response.body), "".to_string());
+            assert_eq!(body_string(response.body), body);
         });
     }
 

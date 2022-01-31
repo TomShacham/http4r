@@ -70,13 +70,13 @@ pub fn read_message_from_wire<'a>(
     mut start_line_writer: &'a mut Vec<u8>,
     mut headers_writer: &'a mut Vec<u8>,
     chunks_writer: &'a mut Vec<u8>,
+    compress_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
     request_options: Option<RequestOptions>,
 ) -> Result<HttpMessage<'a>, MessageError> {
-    let requsted_compression = request_options.map(|o| o.desired_compression);
     let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
-        read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None, requsted_compression.unwrap_or(NONE),
-             |reader, writer, _, _ | { start_line_(reader, writer) },
+        read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None,
+             |reader, writer, _| { start_line_(reader, writer) },
         );
     let start_line = str::from_utf8(start_line_writer).unwrap().split(" ").collect::<Vec<&str>>();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
@@ -84,8 +84,8 @@ pub fn read_message_from_wire<'a>(
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
     (read_bytes_from_stream, up_to_in_reader, result) =
-        read(&mut stream, &mut reader, &mut headers_writer, read_bytes_from_stream, up_to_in_reader, None, requsted_compression.unwrap_or(NONE),
-             |reader, writer, _, _ | { headers_(reader, writer) },
+        read(&mut stream, &mut reader, &mut headers_writer, read_bytes_from_stream, up_to_in_reader, None,
+             |reader, writer, _| { headers_(reader, writer) },
         );
 
     if result.is_err() {
@@ -114,6 +114,7 @@ pub fn read_message_from_wire<'a>(
         up_to_in_reader,
         read_bytes_from_stream,
         chunks_writer,
+        compress_writer,
         trailers_writer,
         &headers,
         is_version_1_0,
@@ -122,7 +123,7 @@ pub fn read_message_from_wire<'a>(
         headers.content_length_header(),
         transfer_encoding,
         wants_trailers,
-        request_options.unwrap().desired_compression
+        request_options,
     );
     if result.is_err() {
         return Err(result.err().unwrap());
@@ -203,14 +204,13 @@ fn read(
     mut read_bytes_from_stream: usize,
     mut up_to_in_reader: usize,
     mut metadata: Option<ReadMetadata>,
-    compression: CompressionAlgorithm,
-    fun: fn(&mut [u8], &mut Vec<u8>, Option<ReadMetadata>, CompressionAlgorithm) -> ReadResult,
+    fun: fn(&mut [u8], &mut Vec<u8>, Option<ReadMetadata>) -> ReadResult,
 ) -> (usize, usize, ReadResult) {
     let mut finished = false;
     let mut result = ReadResult::Err(MessageError::HeadersTooBig("".to_string()));
     while !finished {
         if up_to_in_reader > 0 {
-            result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer, metadata, compression);
+            result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer, metadata);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
@@ -229,7 +229,7 @@ fn read(
             if finished { break; }
         } else {
             read_bytes_from_stream = stream.read(&mut reader).unwrap();
-            result = fun(&mut reader[..read_bytes_from_stream], writer, metadata, compression);
+            result = fun(&mut reader[..read_bytes_from_stream], writer, metadata);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
             }
@@ -269,6 +269,7 @@ fn body_from<'a>(
     up_to_in_reader: usize,
     read_bytes_from_stream: usize,
     chunks_writer: &'a mut Vec<u8>,
+    compress_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
     existing_headers: &Headers,
     is_version_1_0: bool,
@@ -277,7 +278,7 @@ fn body_from<'a>(
     content_length: Option<Result<usize, String>>,
     transfer_encoding: Option<String>,
     wants_trailers: bool,
-    compression: CompressionAlgorithm
+    request_options: Option<RequestOptions>,
 ) -> Result<(Body<'a>, Headers, Headers), MessageError> {
     let body;
     let mut trailers = Headers::empty();
@@ -290,12 +291,19 @@ fn body_from<'a>(
             .collect::<Vec<String>>())
         .unwrap_or(vec!());
 
+    let compression = if !is_request && request_options.is_some() {
+        request_options.unwrap().response_compression()
+    } else if request_options.is_some() {
+        request_options.unwrap().desired_compression
+    } else { NONE };
+
     if let Some(_encoding) = transfer_encoding {
         let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
-        let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) = read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, compression, |reader, writer, metadata, compression| {
-            let meta = metadata.unwrap().to_chunked_metadata();
-            body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size, compression)
-        });
+        let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
+            read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
+                let meta = metadata.unwrap().to_chunked_metadata();
+                body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size)
+            });
         if result.is_err() {
             return Err(result.err());
         }
@@ -303,9 +311,10 @@ fn body_from<'a>(
 
         let more_bytes_to_read_after_body = up_to_in_reader < read_bytes_from_stream;
         if more_bytes_to_read_after_body {
-            (read_bytes_from_stream, up_to_in_reader, result) = read(&mut stream, reader, trailers_writer, read_bytes_from_stream, up_to_in_reader, metadata, compression,|reader, writer, _metadata, _compression| {
-                trailers_(reader, writer)
-            });
+            (read_bytes_from_stream, up_to_in_reader, result) =
+                read(&mut stream, reader, trailers_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, _metadata| {
+                    trailers_(reader, writer)
+                });
         }
         if result.is_err() {
             return Err(result.err());
@@ -324,7 +333,12 @@ fn body_from<'a>(
             headers = headers.add(("Content-Length", chunked_body_bytes_read.to_string().as_str()))
                 .remove("Transfer-Encoding");
         }
-        body = BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)));
+        if compression.is_some() {
+            decompress(&compression, compress_writer, chunks_writer);
+            body = BodyStream(Box::new(compress_writer.take(compress_writer.len() as u64)));
+        } else {
+            body = BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)));
+        }
     } else {
         let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
         match content_length {
@@ -339,7 +353,6 @@ fn body_from<'a>(
             }
             Some(Ok(content_length)) => {
                 // we need to read more to get the body
-                //todo() do we need this if else? arent they the same
                 let rest = stream.take((content_length - bytes_left_in_reader) as u64);
                 body = Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)));
             }
@@ -352,7 +365,7 @@ fn body_from<'a>(
     Ok((body, headers, trailers))
 }
 
-fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize, compression: CompressionAlgorithm) -> ReadResult {
+fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize) -> ReadResult {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut chunk_size: usize = this_chunk_size;
     let mut bytes_of_this_chunk_read_previously = read_up_to;
@@ -409,11 +422,6 @@ fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up
         }
     }
 
-    if compression.is_some() {
-
-    }
-
-    //todo() start of trailers also needed ??
     let metadata = ReadMetadata::chunked(mode, chunk_size, bytes_of_this_chunk_read_previously);
     ReadResult::Ok((finished, up_to_in_reader, Some(metadata)))
 }
@@ -591,10 +599,9 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
             let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
                 .unwrap_or(res.headers);
 
-            let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
-            let compression = if compression.is_none() && request_options.is_some() {
-                request_options.unwrap().desired_compression
-            } else { compression };
+            let compression = if request_options.is_some() {
+                request_options.unwrap().response_compression()
+            } else { NONE };
             let headers = if headers.has("TE") {
                 headers.remove("TE")
             } else { headers };
@@ -671,7 +678,7 @@ fn compress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u
 fn decompress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u8>, reader: &'a mut Vec<u8>) {
     match compression {
         GZIP | DEFLATE => { Codex::decode(reader, writer, compression); }
-        NONE => {writer.write_all(reader).unwrap(); }
+        NONE => { writer.write_all(reader).unwrap(); }
     }
 }
 
@@ -725,7 +732,8 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
             compress(&compression, &mut temp, chunk);
             let compressed_length = temp.len().to_string();
             let reversed = compressed_length.chars().rev().collect::<String>();
-            temp.insert(0, b'\n'); temp.insert(0, b'\r');
+            temp.insert(0, b'\n');
+            temp.insert(0, b'\r');
             for byte in reversed.as_bytes() {
                 temp.insert(0, *byte)
             }
@@ -973,22 +981,31 @@ pub fn body_string(mut body: Body) -> String {
 #[derive(Copy, Clone)]
 pub struct RequestOptions {
     pub desired_compression: CompressionAlgorithm,
-    pub wants_trailers: bool
+    pub wants_trailers: bool,
+    pub compress_response: CompressionAlgorithm,
 }
 
 #[allow(non_snake_case)]
 impl RequestOptions {
     pub fn from(headers: &Headers) -> RequestOptions {
         let mut compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
-        if compression.is_none()  {
-            let TE_header = headers.get("TE");
-            let mut desired_encoding = most_desired_encoding(TE_header);
-            let str = desired_encoding.get_or_insert("none".to_string());
-            compression = CompressionAlgorithm::from(str.to_string());
-        }
+        let TE_header = headers.get("TE");
+        let mut desired_encoding = most_desired_encoding(TE_header);
+        let str = desired_encoding.get_or_insert("none".to_string());
+        let response_compression = CompressionAlgorithm::from(str.to_string());
+
         RequestOptions {
             desired_compression: compression,
-            wants_trailers: headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false)
+            compress_response: response_compression,
+            wants_trailers: headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false),
+        }
+    }
+
+    pub fn response_compression(&self) -> CompressionAlgorithm {
+        if self.desired_compression.is_some() {
+            self.desired_compression
+        } else {
+            self.compress_response
         }
     }
 }
