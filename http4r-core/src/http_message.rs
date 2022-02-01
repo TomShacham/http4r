@@ -81,6 +81,7 @@ pub fn read_message_from_wire<'a>(
     let start_line = str::from_utf8(start_line_writer).unwrap().split(" ").collect::<Vec<&str>>();
     let (part1, part2, part3) = (start_line[0], start_line[1], start_line[2]);
     let is_response = part1.starts_with("HTTP");
+    let is_request = !is_response;
     let method_can_have_body = vec!("POST", "PUT", "PATCH", "DELETE").contains(&part1);
 
     (read_bytes_from_stream, up_to_in_reader, result) =
@@ -128,7 +129,27 @@ pub fn read_message_from_wire<'a>(
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (body, headers, trailers) = result.unwrap();
+    let (body, mut headers, mut trailers, chunked_body_bytes_read) = result.unwrap();
+
+    let expected_trailers = headers.get("Trailer");
+    let cleansed_trailers = expected_trailers
+        .map(|ts| ts.split(", ")
+            .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
+            .map(|t| t.to_string())
+            .collect::<Vec<String>>())
+        .unwrap_or(vec!());
+
+    if !wants_trailers {
+        let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+        headers = headers.add_all(trailers.filter(as_str));
+        trailers = Headers::empty();
+    }
+    // should only be doing this if we are talking to a user agent that does not accept chunked encoding
+    // otherwise keep chunked encoding header
+    if is_request && is_version_1_0 {
+        headers = headers.add(("Content-Length", chunked_body_bytes_read.to_string().as_str()))
+            .remove("Transfer-Encoding");
+    }
 
     message(part1.to_string(), part2, part3.clone().to_string(), is_response, body, headers, trailers)
 }
@@ -279,16 +300,8 @@ fn body_and_trailers_from<'a>(
     transfer_encoding: Option<String>,
     wants_trailers: bool,
     request_options: Option<RequestOptions>,
-) -> Result<(Body<'a>, Headers, Headers), MessageError> {
-    let mut trailers = Headers::empty();
+) -> Result<(Body<'a>, Headers, Headers, usize), MessageError> {
     let mut headers = Headers::from_headers(existing_headers);
-    let expected_trailers = headers.get("Trailer");
-    let cleansed_trailers = expected_trailers
-        .map(|ts| ts.split(", ")
-            .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>())
-        .unwrap_or(vec!());
 
     let compression = if !is_request && request_options.is_some() {
         request_options.unwrap().response_compression()
@@ -297,32 +310,21 @@ fn body_and_trailers_from<'a>(
     } else { NONE };
 
     if let Some(_encoding) = transfer_encoding {
-        let result = chunked_body_and_trailers(reader, &mut stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, trailers_writer);
+        let result = read_body_and_trailers(reader, &mut stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, trailers_writer);
         if result.is_err() {
             return Err(result.err().unwrap());
         }
         let chunked_body_bytes_read = result.unwrap();
         let trailer_string = from_utf8(trailers_writer.as_slice()).unwrap();
-        trailers = Headers::parse_from(trailer_string);
+        let trailers = Headers::parse_from(trailer_string);
 
-        if !wants_trailers {
-            let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
-            headers = headers.add_all(trailers.filter(as_str));
-            trailers = Headers::empty();
-        }
-        // should only be doing this if we are talking to a user agent that does not accept chunked encoding
-        // otherwise keep chunked encoding header
-        if is_request && is_version_1_0 {
-            headers = headers.add(("Content-Length", chunked_body_bytes_read.to_string().as_str()))
-                .remove("Transfer-Encoding");
-        }
         let body = if compression.is_some() {
             decompress(&compression, compress_writer, chunks_writer);
             BodyStream(Box::new(compress_writer.take(compress_writer.len() as u64)))
         } else {
             BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)))
         };
-        Ok((body, headers, trailers))
+        Ok((body, headers, trailers, chunked_body_bytes_read))
     } else {
         let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
         let body = match content_length {
@@ -345,11 +347,11 @@ fn body_and_trailers_from<'a>(
             }
             _ => Body::empty()
         };
-        Ok((body, headers, trailers))
+        Ok((body, headers, Headers::empty(), 0))
     }
 }
 
-fn chunked_body_and_trailers(reader: &mut [u8], mut stream: &mut TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, chunks_writer: &mut Vec<u8>, trailers_writer: &mut Vec<u8>) -> Result<usize, MessageError> {
+fn read_body_and_trailers(reader: &mut [u8], mut stream: &mut TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, chunks_writer: &mut Vec<u8>, trailers_writer: &mut Vec<u8>) -> Result<usize, MessageError> {
     let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
     let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
         read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
