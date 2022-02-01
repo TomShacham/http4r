@@ -108,7 +108,7 @@ pub fn read_message_from_wire<'a>(
     let is_version_1_0 = part3 == "HTTP/1.0";
     let wants_trailers = request_options.map(|x| x.wants_trailers).unwrap_or(false);
 
-    let result = body_from(
+    let result = body_and_trailers_from(
         &mut reader[..],
         stream.try_clone().unwrap(),
         up_to_in_reader,
@@ -263,7 +263,7 @@ fn message<'a>(part1: String, part2: &'a str, part3: String, is_response: bool, 
 }
 
 #[allow(unused_assignments, unused_variables)]
-fn body_from<'a>(
+fn body_and_trailers_from<'a>(
     reader: &'a mut [u8],
     mut stream: TcpStream,
     up_to_in_reader: usize,
@@ -280,7 +280,6 @@ fn body_from<'a>(
     wants_trailers: bool,
     request_options: Option<RequestOptions>,
 ) -> Result<(Body<'a>, Headers, Headers), MessageError> {
-    let body;
     let mut trailers = Headers::empty();
     let mut headers = Headers::from_headers(existing_headers);
     let expected_trailers = headers.get("Trailer");
@@ -333,36 +332,37 @@ fn body_from<'a>(
             headers = headers.add(("Content-Length", chunked_body_bytes_read.to_string().as_str()))
                 .remove("Transfer-Encoding");
         }
-        if compression.is_some() {
+        let body = if compression.is_some() {
             decompress(&compression, compress_writer, chunks_writer);
-            body = BodyStream(Box::new(compress_writer.take(compress_writer.len() as u64)));
+            BodyStream(Box::new(compress_writer.take(compress_writer.len() as u64)))
         } else {
-            body = BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)));
-        }
+            BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)))
+        };
+        Ok((body, headers, trailers))
     } else {
         let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
-        match content_length {
+        let body = match content_length {
             Some(_) if is_request && !method_can_have_body => {
                 headers = headers.replace(("Content-Length", "0"));
-                body = Body::empty()
+                Body::empty()
             }
             // we have read the whole body in the first read
             Some(Ok(content_length)) if bytes_left_in_reader == content_length => {
                 let result = str::from_utf8(&reader[up_to_in_reader..read_bytes_from_stream]).unwrap();
-                body = Body::BodyString(result)
+                Body::BodyString(result)
             }
             Some(Ok(content_length)) => {
                 // we need to read more to get the body
                 let rest = stream.take((content_length - bytes_left_in_reader) as u64);
-                body = Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)));
+                Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)))
             }
             Some(Err(error)) => {
                 return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
             }
-            _ => body = Body::empty()
-        }
+            _ => Body::empty()
+        };
+        Ok((body, headers, trailers))
     }
-    Ok((body, headers, trailers))
 }
 
 fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize) -> ReadResult {
@@ -675,7 +675,7 @@ fn compress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u
     }
 }
 
-fn decompress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u8>, reader: &'a mut Vec<u8>) {
+fn decompress<'a>(compression: &'a CompressionAlgorithm, writer: &'a mut Vec<u8>, reader: &'a mut Vec<u8>) {
     match compression {
         GZIP | DEFLATE => { Codex::decode(reader, writer, compression); }
         NONE => { writer.write_all(reader).unwrap(); }
@@ -988,7 +988,7 @@ pub struct RequestOptions {
 #[allow(non_snake_case)]
 impl RequestOptions {
     pub fn from(headers: &Headers) -> RequestOptions {
-        let mut compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
+        let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
         let TE_header = headers.get("TE");
         let mut desired_encoding = most_desired_encoding(TE_header);
         let str = desired_encoding.get_or_insert("none".to_string());

@@ -4,7 +4,7 @@ use std::io::{Write};
 use std::sync::Arc;
 use crate::handler::Handler;
 use crate::headers::Headers;
-use crate::http_message::{CompressionAlgorithm, HttpMessage, read_message_from_wire, MessageError, most_desired_encoding, RequestOptions, Response, write_message_to_wire};
+use crate::http_message::{HttpMessage, read_message_from_wire, MessageError, RequestOptions, Response, write_message_to_wire};
 use crate::http_message::Body::{BodyString};
 use crate::pool::ThreadPool;
 
