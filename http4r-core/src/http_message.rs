@@ -129,8 +129,11 @@ pub fn read_message_from_wire<'a>(
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (body, mut headers, mut trailers, chunked_body_bytes_read) = result.unwrap();
+    let (body, mut headers, mut trailers, content_length) = result.unwrap();
 
+    if headers.get("Transfer-Encoding").is_none() {
+        headers = headers.replace(("Content-Length", content_length.to_string().as_str()));
+    }
     let expected_trailers = headers.get("Trailer");
     let cleansed_trailers = expected_trailers
         .map(|ts| ts.split(", ")
@@ -147,7 +150,7 @@ pub fn read_message_from_wire<'a>(
     // should only be doing this if we are talking to a user agent that does not accept chunked encoding
     // otherwise keep chunked encoding header
     if is_request && is_version_1_0 {
-        headers = headers.add(("Content-Length", chunked_body_bytes_read.to_string().as_str()))
+        headers = headers.add(("Content-Length", content_length.to_string().as_str()))
             .remove("Transfer-Encoding");
     }
 
@@ -327,27 +330,27 @@ fn body_and_trailers_from<'a>(
         Ok((body, headers, trailers, chunked_body_bytes_read))
     } else {
         let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
-        let body = match content_length {
+        let (body, content_length) = match content_length {
             Some(_) if is_request && !method_can_have_body => {
                 headers = headers.replace(("Content-Length", "0"));
-                Body::empty()
+                (Body::empty(), 0)
             }
             // we have read the whole body in the first read
             Some(Ok(content_length)) if bytes_left_in_reader == content_length => {
                 let result = str::from_utf8(&reader[up_to_in_reader..read_bytes_from_stream]).unwrap();
-                Body::BodyString(result)
+                (Body::BodyString(result), content_length)
             }
             Some(Ok(content_length)) => {
                 // we need to read more to get the body
                 let rest = stream.take((content_length - bytes_left_in_reader) as u64);
-                Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest)))
+                (Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest))), content_length)
             }
             Some(Err(error)) => {
                 return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
             }
-            _ => Body::empty()
+            _ => (Body::empty(), 0)
         };
-        Ok((body, headers, Headers::empty(), 0))
+        Ok((body, headers, Headers::empty(), content_length))
     }
 }
 
