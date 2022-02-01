@@ -109,6 +109,12 @@ pub fn read_message_from_wire<'a>(
     let is_version_1_0 = part3 == "HTTP/1.0";
     let wants_trailers = request_options.map(|x| x.wants_trailers).unwrap_or(false);
 
+    let compression = if !is_request && request_options.is_some() {
+        request_options.unwrap().response_compression()
+    } else if request_options.is_some() {
+        request_options.unwrap().desired_compression
+    } else { NONE };
+
     let result = body_and_trailers_from(
         &mut reader[..],
         stream.try_clone().unwrap(),
@@ -117,12 +123,10 @@ pub fn read_message_from_wire<'a>(
         chunks_writer,
         compress_writer,
         trailers_writer,
-        &headers,
         !is_response,
         method_can_have_body,
         headers.content_length_header(),
-        transfer_encoding,
-        request_options,
+        transfer_encoding, compression,
     );
     if result.is_err() {
         return Err(result.err().unwrap());
@@ -293,19 +297,12 @@ fn body_and_trailers_from<'a>(
     chunks_writer: &'a mut Vec<u8>,
     compress_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
-    existing_headers: &Headers,
     is_request: bool,
     method_can_have_body: bool,
     content_length: Option<Result<usize, String>>,
     transfer_encoding: Option<String>,
-    request_options: Option<RequestOptions>,
+    compression: CompressionAlgorithm,
 ) -> Result<(Body<'a>, Headers, usize), MessageError> {
-    let compression = if !is_request && request_options.is_some() {
-        request_options.unwrap().response_compression()
-    } else if request_options.is_some() {
-        request_options.unwrap().desired_compression
-    } else { NONE };
-
     if let Some(_encoding) = transfer_encoding {
         let result = read_body_and_trailers(reader, &mut stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, trailers_writer);
         if result.is_err() {
