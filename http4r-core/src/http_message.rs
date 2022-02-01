@@ -118,18 +118,16 @@ pub fn read_message_from_wire<'a>(
         compress_writer,
         trailers_writer,
         &headers,
-        is_version_1_0,
         !is_response,
         method_can_have_body,
         headers.content_length_header(),
         transfer_encoding,
-        wants_trailers,
         request_options,
     );
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (body, mut headers, mut trailers, content_length) = result.unwrap();
+    let (body, mut trailers, content_length) = result.unwrap();
 
     if headers.get("Transfer-Encoding").is_none() {
         headers = headers.replace(("Content-Length", content_length.to_string().as_str()));
@@ -296,16 +294,12 @@ fn body_and_trailers_from<'a>(
     compress_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
     existing_headers: &Headers,
-    is_version_1_0: bool,
     is_request: bool,
     method_can_have_body: bool,
     content_length: Option<Result<usize, String>>,
     transfer_encoding: Option<String>,
-    wants_trailers: bool,
     request_options: Option<RequestOptions>,
-) -> Result<(Body<'a>, Headers, Headers, usize), MessageError> {
-    let mut headers = Headers::from_headers(existing_headers);
-
+) -> Result<(Body<'a>, Headers, usize), MessageError> {
     let compression = if !is_request && request_options.is_some() {
         request_options.unwrap().response_compression()
     } else if request_options.is_some() {
@@ -327,12 +321,11 @@ fn body_and_trailers_from<'a>(
         } else {
             BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)))
         };
-        Ok((body, headers, trailers, chunked_body_bytes_read))
+        Ok((body, trailers, chunked_body_bytes_read))
     } else {
         let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
         let (body, content_length) = match content_length {
             Some(_) if is_request && !method_can_have_body => {
-                headers = headers.replace(("Content-Length", "0"));
                 (Body::empty(), 0)
             }
             // we have read the whole body in the first read
@@ -350,7 +343,7 @@ fn body_and_trailers_from<'a>(
             }
             _ => (Body::empty(), 0)
         };
-        Ok((body, headers, Headers::empty(), content_length))
+        Ok((body, Headers::empty(), content_length))
     }
 }
 
