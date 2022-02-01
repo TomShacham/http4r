@@ -115,19 +115,16 @@ pub fn read_message_from_wire<'a>(
         request_options.unwrap().desired_compression
     } else { NONE };
 
-    let result = body_and_trailers_from(
-        &mut reader[..],
-        stream.try_clone().unwrap(),
-        up_to_in_reader,
-        read_bytes_from_stream,
-        chunks_writer,
-        compress_writer,
-        trailers_writer,
-        !is_response,
-        method_can_have_body,
-        headers.content_length_header(),
-        transfer_encoding, compression,
-    );
+    let reader = &mut reader[..];
+    let mut stream = stream.try_clone().unwrap();
+    let is_request = !is_response;
+    let content_length = headers.content_length_header();
+
+    let result = if let Some(_encoding) = transfer_encoding {
+        chunked_body_and_trailers(reader, stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, compress_writer, trailers_writer, &compression)
+    } else {
+        simple_body(reader, stream, up_to_in_reader, read_bytes_from_stream, is_request, method_can_have_body, content_length)
+    };
     if result.is_err() {
         return Err(result.err().unwrap());
     }
@@ -288,8 +285,31 @@ fn message<'a>(part1: String, part2: &'a str, part3: String, is_response: bool, 
     }
 }
 
-#[allow(unused_assignments, unused_variables)]
-fn body_and_trailers_from<'a>(
+fn simple_body(reader: &mut [u8], mut stream: TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, is_request: bool, method_can_have_body: bool, content_length: Option<Result<usize, String>>) -> Result<(Body, Headers, usize), MessageError> {
+    let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
+    let (body, content_length) = match content_length {
+        Some(_) if is_request && !method_can_have_body => {
+            (Body::empty(), 0)
+        }
+        // we have read the whole body in the first read
+        Some(Ok(content_length)) if bytes_left_in_reader == content_length => {
+            let result = str::from_utf8(&reader[up_to_in_reader..read_bytes_from_stream]).unwrap();
+            (Body::BodyString(result), content_length)
+        }
+        Some(Ok(content_length)) => {
+            // we need to read more to get the body
+            let rest = stream.take((content_length - bytes_left_in_reader) as u64);
+            (Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest))), content_length)
+        }
+        Some(Err(error)) => {
+            return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
+        }
+        _ => (Body::empty(), 0)
+    };
+    Ok((body, Headers::empty(), content_length))
+}
+
+fn chunked_body_and_trailers<'a>(
     reader: &'a mut [u8],
     mut stream: TcpStream,
     up_to_in_reader: usize,
@@ -297,51 +317,23 @@ fn body_and_trailers_from<'a>(
     chunks_writer: &'a mut Vec<u8>,
     compress_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
-    is_request: bool,
-    method_can_have_body: bool,
-    content_length: Option<Result<usize, String>>,
-    transfer_encoding: Option<String>,
-    compression: CompressionAlgorithm,
+    compression: &CompressionAlgorithm
 ) -> Result<(Body<'a>, Headers, usize), MessageError> {
-    if let Some(_encoding) = transfer_encoding {
-        let result = read_body_and_trailers(reader, &mut stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, trailers_writer);
-        if result.is_err() {
-            return Err(result.err().unwrap());
-        }
-        let chunked_body_bytes_read = result.unwrap();
-        let trailer_string = from_utf8(trailers_writer.as_slice()).unwrap();
-        let trailers = Headers::parse_from(trailer_string);
-
-        let body = if compression.is_some() {
-            decompress(&compression, compress_writer, chunks_writer);
-            BodyStream(Box::new(compress_writer.take(compress_writer.len() as u64)))
-        } else {
-            BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)))
-        };
-        Ok((body, trailers, chunked_body_bytes_read))
-    } else {
-        let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
-        let (body, content_length) = match content_length {
-            Some(_) if is_request && !method_can_have_body => {
-                (Body::empty(), 0)
-            }
-            // we have read the whole body in the first read
-            Some(Ok(content_length)) if bytes_left_in_reader == content_length => {
-                let result = str::from_utf8(&reader[up_to_in_reader..read_bytes_from_stream]).unwrap();
-                (Body::BodyString(result), content_length)
-            }
-            Some(Ok(content_length)) => {
-                // we need to read more to get the body
-                let rest = stream.take((content_length - bytes_left_in_reader) as u64);
-                (Body::BodyStream(Box::new(reader[up_to_in_reader..read_bytes_from_stream].chain(rest))), content_length)
-            }
-            Some(Err(error)) => {
-                return Err(MessageError::InvalidContentLength(format!("Content Length header couldn't be parsed, got {}", error).to_string()));
-            }
-            _ => (Body::empty(), 0)
-        };
-        Ok((body, Headers::empty(), content_length))
+    let result = read_body_and_trailers(reader, &mut stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, trailers_writer);
+    if result.is_err() {
+        return Err(result.err().unwrap());
     }
+    let chunked_body_bytes_read = result.unwrap();
+    let trailer_string = from_utf8(trailers_writer.as_slice()).unwrap();
+    let trailers = Headers::parse_from(trailer_string);
+
+    let body = if compression.is_some() {
+        decompress(&compression, compress_writer, chunks_writer);
+        BodyStream(Box::new(compress_writer.take(compress_writer.len() as u64)))
+    } else {
+        BodyStream(Box::new(chunks_writer.take(chunks_writer.len() as u64)))
+    };
+    Ok((body, trailers, chunked_body_bytes_read))
 }
 
 fn read_body_and_trailers(reader: &mut [u8], mut stream: &mut TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, chunks_writer: &mut Vec<u8>, trailers_writer: &mut Vec<u8>) -> Result<usize, MessageError> {
