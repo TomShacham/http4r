@@ -244,7 +244,7 @@ When a chunked message containing a non-empty trailer is received,
             Headers::from(vec!(
                 ("Transfer-Encoding", "chunked"),
                 ("Trailer", "Expires"),
-                ("TE", "trailers, deflate;q=0.5")
+                ("TE", "trailers")
             )),
             BodyString(body),
         ).with_trailers(Headers::from(vec!(
@@ -258,7 +258,7 @@ When a chunked message containing a non-empty trailer is received,
                 //Expires should be in trailers
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
-                ("TE".to_string(), "trailers, deflate;q=0.5".to_string()),
+                // TE trailer should be removed
             ), response.headers.vec);
             assert_eq!(vec!(
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),

@@ -297,27 +297,11 @@ fn body_and_trailers_from<'a>(
     } else { NONE };
 
     if let Some(_encoding) = transfer_encoding {
-        let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
-        let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
-            read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
-                let meta = metadata.unwrap().to_chunked_metadata();
-                body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size)
-            });
+        let result = chunked_body_and_trailers(reader, &mut stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, trailers_writer);
         if result.is_err() {
-            return Err(result.err());
+            return Err(result.err().unwrap());
         }
-        let (_finished, chunked_body_bytes_read, _metadata) = result.unwrap();
-
-        let more_bytes_to_read_after_body = up_to_in_reader < read_bytes_from_stream;
-        if more_bytes_to_read_after_body {
-            (read_bytes_from_stream, up_to_in_reader, result) =
-                read(&mut stream, reader, trailers_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, _metadata| {
-                    trailers_(reader, writer)
-                });
-        }
-        if result.is_err() {
-            return Err(result.err());
-        }
+        let chunked_body_bytes_read = result.unwrap();
         let trailer_string = from_utf8(trailers_writer.as_slice()).unwrap();
         trailers = Headers::parse_from(trailer_string);
 
@@ -363,6 +347,31 @@ fn body_and_trailers_from<'a>(
         };
         Ok((body, headers, trailers))
     }
+}
+
+fn chunked_body_and_trailers(reader: &mut [u8], mut stream: &mut TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, chunks_writer: &mut Vec<u8>, trailers_writer: &mut Vec<u8>) -> Result<usize, MessageError> {
+    let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
+    let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
+        read(&mut stream, reader, chunks_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, metadata| {
+            let meta = metadata.unwrap().to_chunked_metadata();
+            body_chunks_(reader, writer, meta.mode, meta.bytes_of_this_chunk_read, meta.chunk_size)
+        });
+    if result.is_err() {
+        return Err(result.err());
+    }
+    let (_finished, chunked_body_bytes_read, _metadata) = result.unwrap();
+
+    let more_bytes_to_read_after_body = up_to_in_reader < read_bytes_from_stream;
+    if more_bytes_to_read_after_body {
+        (read_bytes_from_stream, up_to_in_reader, result) =
+            read(&mut stream, reader, trailers_writer, read_bytes_from_stream, up_to_in_reader, metadata, |reader, writer, _metadata| {
+                trailers_(reader, writer)
+            });
+    }
+    if result.is_err() {
+        return Err(result.err());
+    }
+    Ok(chunked_body_bytes_read)
 }
 
 fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize) -> ReadResult {
