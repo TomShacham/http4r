@@ -392,7 +392,7 @@ When a chunked message containing a non-empty trailer is received,
             assert_eq!(body_string(response.body), body);
             assert_eq!(OK, response.status);
             assert_eq!(vec!(
-                ("Transfer-Encoding".to_string(), "deflate, chunked".to_string()),
+                ("Transfer-Encoding".to_string(), "brotli, chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),

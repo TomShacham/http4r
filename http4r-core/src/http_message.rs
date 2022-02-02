@@ -17,6 +17,7 @@
  */
 
 use std::io::{copy, Read, Write};
+use std::mem::transmute;
 use std::net::TcpStream;
 use std::str;
 use std::str::from_utf8;
@@ -534,8 +535,13 @@ impl CompressionAlgorithm {
         match str {
             str if str.contains("gzip") => GZIP,
             str if str.contains("deflate") => DEFLATE,
+            str if str.contains("brotli") => BROTLI,
             _ => NONE
         }
+    }
+
+    pub fn supported_algorithms() -> Vec<String> {
+        vec!("gzip".to_string(), "brotli".to_string(), "deflate".to_string())
     }
 
     pub fn to_string(&self) -> String {
@@ -812,7 +818,7 @@ pub fn most_desired_encoding(str: Option<String>) -> Option<String> {
             })
             .filter(|p| p.is_some())
             .map(|x| x.unwrap())
-            .filter(|y| vec!("gzip", "deflate").contains(&y.0.as_str()))
+            .filter(|y| CompressionAlgorithm::supported_algorithms().contains(&y.0))
             .collect::<Vec<(String, String)>>();
 
         ranked.sort_by(|x, y| x.1.parse::<f32>().unwrap().partial_cmp(&y.1.parse::<f32>().unwrap()).unwrap());
