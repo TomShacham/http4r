@@ -22,7 +22,20 @@ mod tests {
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
+        // no Connection header
         let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked")));
+        client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
+            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: TE")
+        });
+
+        // already set connection header but without TE
+        let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked"), ("Connection", "close")));
+        client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
+            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: close, TE")
+        });
+
+        // set connection header with TE keeps it intact
+        let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked"), ("Connection", "TE")));
         client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
             assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: TE")
         })
