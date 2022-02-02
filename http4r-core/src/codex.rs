@@ -16,6 +16,10 @@ impl Codex {
                 let mut deflate_encoder = DeflateEncoder::new(reader, Compression::fast());
                 deflate_encoder.read_to_end(&mut writer).unwrap();
             }
+            CompressionAlgorithm::BROTLI => {
+                let mut encoder = brotli::CompressorReader::new(reader, reader.len(), 5, 10);
+                encoder.read_to_end(writer);
+            }
             CompressionAlgorithm::NONE => {}
         }
     }
@@ -29,6 +33,10 @@ impl Codex {
             CompressionAlgorithm::DEFLATE => {
                 let mut deflater = DeflateDecoder::new(&reader[..]);
                 deflater.read_to_end(writer).unwrap();
+            }
+            CompressionAlgorithm::BROTLI => {
+                let mut writer = brotli::DecompressorWriter::new(writer, reader.len());
+                writer.write(reader);
             }
             CompressionAlgorithm::NONE => {}
         }

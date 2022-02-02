@@ -374,6 +374,30 @@ When a chunked message containing a non-empty trailer is received,
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
                        response.trailers.vec);
         });
+
+        let chunked_with_TE_brotli = Request::post(
+            Uri::parse("/bob"),
+            Headers::from(vec!(
+                ("Transfer-Encoding", "chunked"),
+                ("Trailer", "Expires"),
+                ("TE", "trailers, gzip;q=0.1, deflate;q=0.7, brotli;q=0.9"),
+                ("Connection", "TE"),
+            )),
+            BodyString(body.as_str()),
+        ).with_trailers(Headers::from(vec!(
+            ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT")
+        )));
+
+        client.handle(chunked_with_TE_brotli, |response: Response| {
+            assert_eq!(body_string(response.body), body);
+            assert_eq!(OK, response.status);
+            assert_eq!(vec!(
+                ("Transfer-Encoding".to_string(), "deflate, chunked".to_string()),
+                ("Trailer".to_string(), "Expires".to_string()),
+            ), response.headers.vec);
+            assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
+                       response.trailers.vec);
+        });
     }
 
     #[test]

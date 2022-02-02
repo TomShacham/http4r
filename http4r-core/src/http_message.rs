@@ -24,7 +24,7 @@ use crate::codex::Codex;
 
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
-use crate::http_message::CompressionAlgorithm::{DEFLATE, GZIP, NONE};
+use crate::http_message::CompressionAlgorithm::{BROTLI, DEFLATE, GZIP, NONE};
 use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
 use crate::http_message::Status::{BadRequest, InternalServerError, LengthRequired, MovedPermanently, NotFound, OK, Unknown};
 use crate::uri::Uri;
@@ -513,6 +513,7 @@ fn trailers_(buffer: &[u8], writer: &mut Vec<u8>) -> ReadResult {
 #[derive(Copy, Clone)]
 pub enum CompressionAlgorithm {
     GZIP,
+    BROTLI,
     DEFLATE,
     NONE,
 }
@@ -540,6 +541,7 @@ impl CompressionAlgorithm {
     pub fn to_string(&self) -> String {
         match self {
             GZIP => "gzip".to_string(),
+            BROTLI => "brotli".to_string(),
             DEFLATE => "deflate".to_string(),
             CompressionAlgorithm::NONE => "".to_string()
         }
@@ -666,6 +668,7 @@ fn compression_from(option: Option<String>) -> CompressionAlgorithm {
 fn compress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u8>, chunk: &'a [u8]) {
     match compression {
         CompressionAlgorithm::GZIP => { Codex::encode(chunk, &mut writer, GZIP); }
+        CompressionAlgorithm::BROTLI => { Codex::encode(chunk, &mut writer, BROTLI); }
         CompressionAlgorithm::DEFLATE => { Codex::encode(chunk, &mut writer, DEFLATE); }
         CompressionAlgorithm::NONE => { writer.write_all(chunk).unwrap(); }
     }
@@ -673,7 +676,7 @@ fn compress<'a>(compression: &'a CompressionAlgorithm, mut writer: &'a mut Vec<u
 
 fn decompress<'a>(compression: &'a CompressionAlgorithm, writer: &'a mut Vec<u8>, reader: &'a mut Vec<u8>) {
     match compression {
-        GZIP | DEFLATE => { Codex::decode(reader, writer, compression); }
+        GZIP | DEFLATE | BROTLI => { Codex::decode(reader, writer, compression); }
         NONE => { writer.write_all(reader).unwrap(); }
     }
 }

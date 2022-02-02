@@ -48,23 +48,22 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
     - read and write to database
 ---
 - core api
-  - support compression - test simple body compression
-  - test deflate
   - support brotli compression
-  - client tests for de/compressing req/res
+  - support compression - test simple body compression eg using content encoding and accept encoding
+  - content negotiation test - eg Accept-Encoding header then server sets Content-Encoding and client decodes
   - limits on headers and body etc tests // sort out these vecs that are being allocated
   - support multipart formdata and form data
   - example app
   - write docs
   - do we want to drop connections in stream.incoming() or do we want to hang onto them for a while
   - if version is known to be 1.0 then do not send chunked message
-  - stream into memory and forward as content-length 
+    - stream into memory and forward as content-length 
+    - support http/1.0 - ie. read til socket close or EOF
   - multipart form data
   - client to use Host header eg Dan's
   - set a body length limit
   - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - default response headers, content-type, content-length, date
-  - support http/1.0 - ie. read til socket close or EOF
   - support Connection: close
   - bidi routing 
   - support http/2.0
