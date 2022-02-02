@@ -2,8 +2,7 @@ use std::io::{Read, Write};
 use crate::http_message::CompressionAlgorithm;
 use flate2::bufread::{DeflateEncoder, GzEncoder};
 use flate2::{Compression};
-use flate2::read::{GzDecoder};
-use flate2::write::DeflateDecoder;
+use flate2::read::{GzDecoder, DeflateDecoder};
 
 pub struct Codex {}
 impl Codex {
@@ -28,9 +27,8 @@ impl Codex {
                 gzip_decoder.read_to_end(&mut writer).unwrap();
             }
             CompressionAlgorithm::DEFLATE => {
-                let mut deflater = DeflateDecoder::new(writer);
-                deflater.write(&reader[..]).unwrap();
-                writer = deflater.finish().unwrap();
+                let mut deflater = DeflateDecoder::new(&reader[..]);
+                deflater.read_to_end(writer).unwrap();
             }
             CompressionAlgorithm::NONE => {}
         }
