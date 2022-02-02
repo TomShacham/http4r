@@ -48,11 +48,10 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
     - read and write to database
 ---
 - core api
-  - support brotli compression
   - support compression - test simple body compression eg using content encoding and accept encoding
   - content negotiation test - eg Accept-Encoding header then server sets Content-Encoding and client decodes
   - limits on headers and body etc tests // sort out these vecs that are being allocated
-  - support multipart formdata and form data
+  - support multipart form data and application url form encoded 
   - example app
   - write docs
   - do we want to drop connections in stream.incoming() or do we want to hang onto them for a while

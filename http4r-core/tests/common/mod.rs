@@ -27,6 +27,20 @@ impl Handler for PassThroughHandler {
     }
 }
 
+
+pub struct PassHeadersAsBody {}
+
+impl Handler for PassHeadersAsBody {
+    fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        // this will not get changed by the write_response_to_wire logic that strips various headers etc
+        // because we are setting the body here in the handler, before it gets written back to the wire
+        let string = req.headers.to_wire_string();
+        let headers_string = string.as_str();
+        let response = Response::ok(req.headers, BodyString(headers_string)).with_trailers(req.trailers);
+        fun(response);
+    }
+}
+
 pub struct MalformedChunkedEncodingClient {
     pub port: u16,
 }

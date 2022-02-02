@@ -318,7 +318,7 @@ fn chunked_body_and_trailers<'a>(
     chunks_writer: &'a mut Vec<u8>,
     compress_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
-    compression: &CompressionAlgorithm
+    compression: &CompressionAlgorithm,
 ) -> Result<(Body<'a>, Headers, usize), MessageError> {
     let result = read_body_and_trailers(reader, &mut stream, up_to_in_reader, read_bytes_from_stream, chunks_writer, trailers_writer);
     if result.is_err() {
@@ -559,10 +559,17 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
     match message {
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
-            let headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, chunked_encoding_desired, &req.version)
+            let mut headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, chunked_encoding_desired, &req.version)
                 .unwrap_or(req.headers);
 
             let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
+
+            if chunked_encoding_desired && headers.get("Connection").map(|h| !h.contains("TE")).unwrap_or(true) {
+                headers = headers.replace(("Connection", headers.get("Connection").map(|mut h| {
+                    h.push_str(", TE");
+                    h
+                }).unwrap_or("TE".to_string()).as_str()));
+            }
 
             let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
                                          req.method.value(),
@@ -723,7 +730,6 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
     } else {
         write_simple_chunks(&mut stream, reader, first_line_and_headers, trailers);
     }
-
 }
 
 fn write_simple_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {

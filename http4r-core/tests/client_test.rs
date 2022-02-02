@@ -5,15 +5,32 @@ mod tests {
     use http4r_core::client::{Client, WithContentLength};
     use http4r_core::handler::Handler;
     use http4r_core::headers::Headers;
+    use http4r_core::http_message::{Body, body_string, Request, Response};
     use http4r_core::http_message::Body::BodyString;
     use http4r_core::http_message::Method::{CONNECT, GET, HEAD, OPTIONS, TRACE};
-    use http4r_core::http_message::{body_string, Request, Response};
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
-    use crate::common::PassThroughHandler;
+
+    use crate::common::{PassHeadersAsBody};
+
+    // test that setting TE header will set the Connection: TE header also
+    #[allow(non_snake_case)]
+    #[test]
+    fn setting_a_TE_header_will_ensure_it_is_set_in_Connection_header_also(){
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassHeadersAsBody {}) });
+
+        let mut client = Client::new("127.0.0.1", server.port, None);
+
+        let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked")));
+        client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
+            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: TE")
+        })
+    }
 
     //todo() test that the client will do a chunked transfer encoding if we dont have content length
     // and we have a bodystream (ie we cant know content length ahead of time)
+
 }
 
 /*
@@ -30,28 +47,6 @@ A user agent SHOULD send a Content-Length in a request message when
    Content-Length header field when the request message does not contain
    a payload body and the method semantics do not anticipate such a
    body.
-
-A process for decoding the chunked transfer coding can be represented
-   in pseudo-code as:
-
-     length := 0
-     read chunk-size, chunk-ext (if any), and CRLF
-     while (chunk-size > 0) {
-        read chunk-data and CRLF
-        append chunk-data to decoded-body
-        length := length + chunk-size
-        read chunk-size, chunk-ext (if any), and CRLF
-     }
-     read trailer field
-     while (trailer field is not empty) {
-        if (trailer field is allowed to be sent in a trailer) {
-            append trailer field to existing header fields
-        }
-        read trailer-field
-     }
-     Content-Length := length
-     Remove "chunked" from Transfer-Encoding
-     Remove Trailer from existing header fields
 
  */
 
