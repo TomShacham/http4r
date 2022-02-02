@@ -36,7 +36,10 @@ impl Handler for PassHeadersAsBody {
         // because we are setting the body here in the handler, before it gets written back to the wire
         let string = req.headers.to_wire_string();
         let headers_string = string.as_str();
-        let response = Response::ok(req.headers, BodyString(headers_string)).with_trailers(req.trailers);
+        let response = Response::ok(
+            req.headers.replace(("Content-Length", string.len().to_string().as_str())),
+            BodyString(headers_string))
+            .with_trailers(req.trailers);
         fun(response);
     }
 }

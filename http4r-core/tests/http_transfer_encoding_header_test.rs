@@ -470,7 +470,6 @@ When a chunked message containing a non-empty trailer is received,
         });
     }
 
-
     // test that we read the body into non-chunked-encoding if it's http 1.0
 
     // test that a proxy can undo transfer encoding but must respect content encoding

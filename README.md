@@ -52,7 +52,8 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
   - content negotiation test - eg Accept-Encoding header then server sets Content-Encoding and client decodes
   - limits on headers and body etc tests // sort out these vecs that are being allocated
   - support multipart form data and application url form encoded 
-  - example app
+  - publish crate
+  - example app with WASM example
   - write docs
   - do we want to drop connections in stream.incoming() or do we want to hang onto them for a while
   - if version is known to be 1.0 then do not send chunked message
