@@ -1,9 +1,5 @@
 ## http4r
 
-### I'm new to Rust or I'm a bit rusty
-
-`rustup` to update your rust and cargo version
-
 ### About
 
 - http4r is based on [Dan's](https://github.com/bodar/) projects
@@ -38,8 +34,17 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program (see COPYING).  If not, see <https://www.gnu.org/licenses/>.
 
+## Contributing
 
-### Todos
+### I'm new to Rust or I'm a bit rusty
+
+Go to https://www.rust-lang.org/tools/install to install `rustup`.
+
+`rustup` to update your rust and cargo version.
+
+Open the project in CLion and Salisbury's your Uncle.
+
+## Todos
 
 - example app
   - write html file handler with appropriate content-type headers and serve 
@@ -61,7 +66,6 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
     - support http/1.0 - ie. read til socket close or EOF
   - multipart form data
   - client to use Host header eg Dan's
-  - set a body length limit
   - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - default response headers, content-type, content-length, date
   - support Connection: close
@@ -70,3 +74,7 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
 
 
 ### Getting started
+
+Docs coming soon
+
+
