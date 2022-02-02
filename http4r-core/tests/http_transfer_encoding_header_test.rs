@@ -342,6 +342,7 @@ When a chunked message containing a non-empty trailer is received,
         )));
 
         client.handle(chunked_with_TE, |response: Response| {
+            assert_eq!(body_string(response.body), body);
             assert_eq!(OK, response.status);
             assert_eq!(vec!(
                 ("Transfer-Encoding".to_string(), "gzip, chunked".to_string()),
@@ -349,7 +350,6 @@ When a chunked message containing a non-empty trailer is received,
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
                        response.trailers.vec);
-            assert_eq!(body_string(response.body), body);
         });
     }
 

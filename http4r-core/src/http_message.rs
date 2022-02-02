@@ -116,7 +116,7 @@ pub fn read_message_from_wire<'a>(
     } else { NONE };
 
     let reader = &mut reader[..];
-    let mut stream = stream.try_clone().unwrap();
+    let stream = stream.try_clone().unwrap();
     let is_request = !is_response;
     let content_length = headers.content_length_header();
 
@@ -285,7 +285,7 @@ fn message<'a>(part1: String, part2: &'a str, part3: String, is_response: bool, 
     }
 }
 
-fn simple_body(reader: &mut [u8], mut stream: TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, is_request: bool, method_can_have_body: bool, content_length: Option<Result<usize, String>>) -> Result<(Body, Headers, usize), MessageError> {
+fn simple_body(reader: &mut [u8], stream: TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, is_request: bool, method_can_have_body: bool, content_length: Option<Result<usize, String>>) -> Result<(Body, Headers, usize), MessageError> {
     let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
     let (body, content_length) = match content_length {
         Some(_) if is_request && !method_can_have_body => {
@@ -712,10 +712,11 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
     let buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);
     let mut first_write = true;
+    let mut temp = Vec::new();
 
     while bytes_read > 0 {
-        let mut temp = vec!();
         if compression.is_none() {
+            temp = Vec::new();
             temp.extend_from_slice(bytes_read.to_string().as_bytes());
             temp.push(b'\r');
             temp.push(b'\n');
@@ -723,31 +724,36 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
             temp.extend_from_slice(chunk);
             temp.push(b'\r');
             temp.push(b'\n');
+            // write to wire
+            if first_write {
+                let first_line_and_headers_and_first_chunk = [first_line_and_headers.as_bytes(), temp.as_slice()].concat();
+                let _copy = copy(&mut first_line_and_headers_and_first_chunk.as_slice(), &mut stream).unwrap();
+                first_write = false;
+            } else {
+                let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
+            }
         } else {
             let chunk = &buffer[..bytes_read];
-            compress(&compression, &mut temp, chunk);
-            let compressed_length = temp.len().to_string();
-            let reversed = compressed_length.chars().rev().collect::<String>();
-            temp.insert(0, b'\n');
-            temp.insert(0, b'\r');
-            for byte in reversed.as_bytes() {
-                temp.insert(0, *byte)
-            }
-            temp.push(b'\r');
-            temp.push(b'\n');
+            temp.extend_from_slice(chunk);
         }
-
-
-        // write to wire
-        if first_write {
-            let first_line_and_headers_and_first_chunk = [first_line_and_headers.as_bytes(), temp.as_slice()].concat();
-            let _copy = copy(&mut first_line_and_headers_and_first_chunk.as_slice(), &mut stream).unwrap();
-            first_write = false;
-        } else {
-            let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
-        }
-
         bytes_read = reader.read(buffer).unwrap();
+    }
+
+    if compression.is_some() {
+        let mut writer = Vec::new();
+        compress(&compression, &mut writer, temp.as_slice());
+        let compressed_length = writer.len().to_string();
+        let reversed = compressed_length.chars().rev().collect::<String>();
+        writer.insert(0, b'\n');
+        writer.insert(0, b'\r');
+        for byte in reversed.as_bytes() {
+            writer.insert(0, *byte)
+        }
+        writer.push(b'\r');
+        writer.push(b'\n');
+
+        let first_line_and_headers_and_first_chunk = [first_line_and_headers.as_bytes(), writer.as_slice()].concat();
+        let _copy = copy(&mut first_line_and_headers_and_first_chunk.as_slice(), &mut stream).unwrap();
     }
     // write end byte
     let mut end = vec!(b'0', b'\r', b'\n');
