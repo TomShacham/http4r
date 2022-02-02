@@ -709,58 +709,77 @@ It is not an error if the returned value n is smaller than the buffer size, even
 This may happen for example because fewer bytes are actually available right now (e. g. being close to end-of-file) or because read() was interrupted by a signal.
  */
 pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers, compression: CompressionAlgorithm) {
+    if compression.is_some() {
+        write_compressed_chunks(&mut stream, reader, &first_line_and_headers, &trailers, &compression);
+    } else {
+        write_simple_chunks(&mut stream, reader, first_line_and_headers, trailers);
+    }
+
+}
+
+fn write_simple_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {
     let buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);
     let mut first_write = true;
     let mut temp = Vec::new();
 
     while bytes_read > 0 {
-        if compression.is_none() {
-            temp = Vec::new();
-            temp.extend_from_slice(bytes_read.to_string().as_bytes());
-            temp.push(b'\r');
-            temp.push(b'\n');
-            let chunk = &buffer[..bytes_read];
-            temp.extend_from_slice(chunk);
-            temp.push(b'\r');
-            temp.push(b'\n');
-            // write to wire
-            if first_write {
-                let first_line_and_headers_and_first_chunk = [first_line_and_headers.as_bytes(), temp.as_slice()].concat();
-                let _copy = copy(&mut first_line_and_headers_and_first_chunk.as_slice(), &mut stream).unwrap();
-                first_write = false;
-            } else {
-                let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
-            }
+        temp = Vec::new();
+        temp.extend_from_slice(bytes_read.to_string().as_bytes());
+        temp.push(b'\r');
+        temp.push(b'\n');
+        let chunk = &buffer[..bytes_read];
+        temp.extend_from_slice(chunk);
+        temp.push(b'\r');
+        temp.push(b'\n');
+        // write to wire
+        if first_write {
+            let first_line_and_headers_and_first_chunk = [first_line_and_headers.as_bytes(), temp.as_slice()].concat();
+            let _copy = copy(&mut first_line_and_headers_and_first_chunk.as_slice(), &mut stream).unwrap();
+            first_write = false;
         } else {
-            let chunk = &buffer[..bytes_read];
-            temp.extend_from_slice(chunk);
+            let _copy = copy(&mut temp.as_slice(), &mut stream).unwrap();
         }
         bytes_read = reader.read(buffer).unwrap();
     }
 
-    if compression.is_some() {
-        let mut writer = Vec::new();
-        compress(&compression, &mut writer, temp.as_slice());
-        let compressed_length = writer.len().to_string();
-        let reversed = compressed_length.chars().rev().collect::<String>();
-        writer.insert(0, b'\n');
-        writer.insert(0, b'\r');
-        for byte in reversed.as_bytes() {
-            writer.insert(0, *byte)
-        }
-        writer.push(b'\r');
-        writer.push(b'\n');
-
-        let first_line_and_headers_and_first_chunk = [first_line_and_headers.as_bytes(), writer.as_slice()].concat();
-        let _copy = copy(&mut first_line_and_headers_and_first_chunk.as_slice(), &mut stream).unwrap();
-    }
     // write end byte
     let mut end = vec!(b'0', b'\r', b'\n');
     if !trailers.is_empty() {
         end.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
     }
     stream.write(end.as_slice()).unwrap();
+}
+
+fn write_compressed_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: &String, trailers: &Headers, compression: &CompressionAlgorithm) {
+    let buffer = &mut [0 as u8; 16384];
+    let mut bytes_read = reader.read(buffer).unwrap_or(0);
+    let mut temp = Vec::new();
+
+    while bytes_read > 0 {
+        let chunk = &buffer[..bytes_read];
+        temp.extend_from_slice(chunk);
+        bytes_read = reader.read(buffer).unwrap();
+    }
+
+    let mut writer = Vec::new();
+    compress(&compression, &mut writer, temp.as_slice());
+    let compressed_length = writer.len().to_string();
+    let reversed = compressed_length.chars().rev().collect::<String>();
+    writer.insert(0, b'\n');
+    writer.insert(0, b'\r');
+    for byte in reversed.as_bytes() {
+        writer.insert(0, *byte)
+    }
+    writer.push(b'\r');
+    writer.push(b'\n');
+
+    let mut end = vec!(b'0', b'\r', b'\n');
+    if !trailers.is_empty() {
+        end.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
+    }
+    let message = [first_line_and_headers.as_bytes(), writer.as_slice(), end.as_slice()].concat();
+    let _copy = copy(&mut message.as_slice(), &mut stream).unwrap();
 }
 
 

@@ -1,3 +1,5 @@
+
+#[cfg(test)]
 mod tests {
     use http4r_core::codex::Codex;
     use http4r_core::http_message::CompressionAlgorithm::{DEFLATE, GZIP};
