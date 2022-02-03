@@ -589,18 +589,13 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
 
             let headers = set_connection_header_if_needed_and_not_present(headers, chunked_encoding_desired);
 
-            let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
-                                         req.method.value(),
-                                         req.uri.to_string(),
-                                         req.version.major,
-                                         req.version.minor,
-                                         headers.to_wire_string());
-
             let start_line = format!("{} {} HTTP/{}.{}\r\n",
                                      req.method.value(),
                                      req.uri.to_string(),
                                      req.version.major,
                                      req.version.minor);
+
+            let request_string = format!("{}{}\r\n\r\n", start_line, headers.to_wire_string());
 
             match req.body {
                 BodyString(str) => {
@@ -655,8 +650,8 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                 trailers = Headers::empty();
             }
 
-            let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let start_line = format!("HTTP/1.1 {} {}\r\n", &res.status.value(), &res.status.to_string());
+            let status_and_headers = format!("{}{}\r\n\r\n", start_line, headers.to_wire_string());
 
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
 
@@ -705,19 +700,23 @@ fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, 
     if chunked_encoding_desired && is_version_1_1 {
         write_chunked_string(stream, start_line_and_headers, body.as_bytes(), trailers, compression);
     } else {
-        if compression.is_none() {
-            let status_headers_and_body = [start_line_and_headers.as_bytes(), body.as_bytes()].concat();
-            stream.write(status_headers_and_body.as_slice()).unwrap();
-        } else {
-            let mut writer = Vec::new();
-            compress(&compression, &mut writer, body.as_bytes());
-            let headers = headers.replace(("Content-Length", writer.len().to_string().as_str()));
-            start_line.push_str(headers.to_wire_string().as_str());
-            start_line.push_str("\r\n\r\n");
-            let mut whole = start_line.as_bytes().to_vec();
-            whole.append(&mut writer);
-            stream.write(&whole).unwrap();
-        }
+        write_compressed_string(stream, &compression, start_line_and_headers, body, headers, &mut start_line)
+    }
+}
+
+fn write_compressed_string(stream: &mut TcpStream, compression: &CompressionAlgorithm, start_line_and_headers: String, body: &str, headers: Headers, start_line: &mut String) {
+    if compression.is_none() {
+        let status_headers_and_body = [start_line_and_headers.as_bytes(), body.as_bytes()].concat();
+        stream.write(status_headers_and_body.as_slice()).unwrap();
+    } else {
+        let mut writer = Vec::new();
+        compress(&compression, &mut writer, body.as_bytes());
+        let headers = headers.replace(("Content-Length", writer.len().to_string().as_str()));
+        start_line.push_str(headers.to_wire_string().as_str());
+        start_line.push_str("\r\n\r\n");
+        let mut whole = start_line.as_bytes().to_vec();
+        whole.append(&mut writer);
+        stream.write(&whole).unwrap();
     }
 }
 
