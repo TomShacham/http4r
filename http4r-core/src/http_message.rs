@@ -564,10 +564,19 @@ impl CompressionAlgorithm {
         vec!("gzip".to_string(), "brotli".to_string(), "deflate".to_string())
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn to_string_for_content_encoding(&self) -> String {
         match self {
             GZIP => "gzip".to_string(),
             BROTLI => "br".to_string(),
+            DEFLATE => "deflate".to_string(),
+            CompressionAlgorithm::NONE => "".to_string()
+        }
+    }
+
+    pub fn to_string_for_transfer_encoding(&self) -> String {
+        match self {
+            GZIP => "gzip".to_string(),
+            BROTLI => "brotli".to_string(),
             DEFLATE => "deflate".to_string(),
             CompressionAlgorithm::NONE => "".to_string()
         }
@@ -637,7 +646,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                 headers.remove("TE")
             } else { headers };
             let headers = if !compression.is_none() && headers.has("Transfer-Encoding") {
-                headers.replace(("Transfer-Encoding", format!("{}, chunked", compression.to_string()).as_str()))
+                headers.replace(("Transfer-Encoding", format!("{}, chunked", compression.to_string_for_transfer_encoding()).as_str()))
             } else { headers };
             let headers = headers.remove("Connection");
 
@@ -662,7 +671,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                             compress(&compression, &mut writer, whole.as_slice());
 
                             let headers = headers.replace(("Content-length", writer.len().to_string().as_str()));
-                            let headers = headers.replace(("Content-Encoding", compression.to_string().as_str()));
+                            let headers = headers.replace(("Content-Encoding", compression.to_string_for_content_encoding().as_str()));
                             let status_and_headers = Response::status_line_and_headers_wire_string(&headers, &res.status);
                             let mut chain = status_and_headers.as_bytes().chain(writer.as_slice());
                             let _copy = copy(&mut chain, &mut stream).unwrap();
