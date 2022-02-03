@@ -71,6 +71,8 @@ Open the project in CLion and Salisbury's your Uncle.
   - support Connection: close
   - bidi routing 
   - support http/2.0
+  - server sent events
+  - websockets
 
 
 ### Getting started

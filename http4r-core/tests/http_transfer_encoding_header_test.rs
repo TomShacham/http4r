@@ -226,16 +226,16 @@ When a chunked message containing a non-empty trailer is received,
         client.handle(do_not_want_trailers, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(body, body_string(response.body));
+            let vec1: Vec<HeaderType> = vec!(
+                // => no Expires trailer in trailers
+            );
+            assert_eq!(vec1, response.trailers.vec);
             assert_eq!(vec!(
                 //Expires is in headers not trailers now
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
             ), response.headers.vec);
-            let vec1: Vec<HeaderType> = vec!(
-                // => no Expires trailer in trailers
-            );
-            assert_eq!(vec1, response.trailers.vec);
         });
 
         let asks_for_trailers = Request::post(
@@ -254,14 +254,14 @@ When a chunked message containing a non-empty trailer is received,
             assert_eq!(OK, response.status);
             assert_eq!(body, body_string(response.body));
             assert_eq!(vec!(
+                ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
+            ), response.trailers.vec);
+            assert_eq!(vec!(
                 //Expires should be in trailers
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
                 // TE trailer should be removed
             ), response.headers.vec);
-            assert_eq!(vec!(
-                ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
-            ), response.trailers.vec);
         });
     }
 

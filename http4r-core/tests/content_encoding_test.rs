@@ -36,4 +36,7 @@ mod tests {
             ));
         })
     }
+
+    // test that we can send an already encoded message
+    // test precedence of Content-Encoding, Transfer-Encoding, TE and Accept-Encoding
 }

@@ -99,21 +99,21 @@ If you are using this software for profit, please donate.".trim());
             | Err(MessageError::InvalidBoundaryDigit(msg))
             => {
                 let response = Response::bad_request(Headers::empty(), BodyString(msg.as_str()));
-                write_message_to_wire(&mut stream, HttpMessage::Response(response), None);
+                write_message_to_wire(&mut stream, HttpMessage::Response(response), RequestOptions::default());
             }
             Err(MessageError::NoContentLengthOrTransferEncoding(msg)) => {
                 let response = Response::length_required(Headers::empty(), BodyString(msg.as_str()));
-                write_message_to_wire(&mut stream, HttpMessage::Response(response), None);
+                write_message_to_wire(&mut stream, HttpMessage::Response(response), RequestOptions::default());
             }
             Ok(HttpMessage::Request(request)) => {
                 let options = RequestOptions::from(&(request.headers));
                 let mut h = handler().unwrap();
                 h.handle(request, |response| {
-                    write_message_to_wire(&mut stream, HttpMessage::Response(response), Some(options));
+                    write_message_to_wire(&mut stream, HttpMessage::Response(response), options);
                 });
             }
             Ok(HttpMessage::Response(response)) => {
-                write_message_to_wire(&mut stream, HttpMessage::Response(response), None);
+                write_message_to_wire(&mut stream, HttpMessage::Response(response), RequestOptions::default());
             }
         };
 

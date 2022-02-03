@@ -26,9 +26,7 @@ impl Handler for Client {
         let uri = format!("{}:{}", self.base_uri, self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
 
-        let headers = Headers::from_headers(&(req.headers));
-        let request_options = Some(RequestOptions::from(&headers));
-        write_message_to_wire(&mut stream, HttpMessage::Request(req), request_options);
+        write_message_to_wire(&mut stream, HttpMessage::Request(req), RequestOptions::default());
 
         let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_writer = Vec::with_capacity(1048576);
@@ -45,7 +43,7 @@ impl Handler for Client {
             &mut chunks_writer,
             &mut compress_writer,
             &mut trailers_writer,
-            request_options
+            None
         );
 
         let response = match result {

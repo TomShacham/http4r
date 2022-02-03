@@ -107,7 +107,6 @@ pub fn read_message_from_wire<'a>(
         headers = headers.remove("Content-Length");
     }
     let is_version_1_0 = part3 == "HTTP/1.0";
-    let wants_trailers = request_options.map(|x| x.wants_trailers).unwrap_or(false);
 
     let compression = if is_response && request_options.is_some() {
         request_options.unwrap().response_compression()
@@ -127,19 +126,6 @@ pub fn read_message_from_wire<'a>(
 
     if headers.get("Transfer-Encoding").is_none() {
         headers = headers.replace(("Content-Length", content_length.to_string().as_str()));
-    }
-    let expected_trailers = headers.get("Trailer");
-    let cleansed_trailers = expected_trailers
-        .map(|ts| ts.split(", ")
-            .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>())
-        .unwrap_or(vec!());
-
-    if !wants_trailers && !trailers.is_empty() {
-        let as_str = cleansed_trailers.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
-        headers = headers.add_all(trailers.filter(as_str));
-        trailers = Headers::empty();
     }
     // should only be doing this if we are talking to a user agent that does not accept chunked encoding
     // otherwise keep chunked encoding header
@@ -584,7 +570,7 @@ impl CompressionAlgorithm {
 }
 
 #[allow(non_snake_case)]
-pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, request_options: Option<RequestOptions>) {
+pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, request_options: RequestOptions) {
     match message {
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
@@ -639,27 +625,33 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
             let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
                 .unwrap_or(res.headers);
 
-            let compression = if request_options.is_some() {
-                request_options.unwrap().response_compression()
-            } else { NONE };
+            let compression = request_options.response_compression();
             let headers = if headers.has("TE") {
                 headers.remove("TE")
             } else { headers };
             let headers = if !compression.is_none() && headers.has("Transfer-Encoding") {
                 headers.replace(("Transfer-Encoding", format!("{}, chunked", compression.to_string_for_transfer_encoding()).as_str()))
             } else { headers };
-            let headers = headers.remove("Connection");
+            let mut headers = headers.remove("Connection");
+            let mut trailers = res.trailers;
+
+            if !request_options.wants_trailers && !trailers.is_empty() {
+                let as_str = request_options.expected_trailers.iter()
+                    .map(|x| x.as_str()).collect::<Vec<&str>>();
+                headers = headers.add_all(trailers.filter(as_str));
+                trailers = Headers::empty();
+            }
 
             let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
 
             match res.body {
                 BodyString(str) => {
-                    write_body_string(stream, compression, status_and_headers, chunked_encoding_desired, str, res.version == one_pt_one(), res.trailers)
+                    write_body_string(stream, compression, status_and_headers, chunked_encoding_desired, str, res.version == one_pt_one(), trailers)
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && res.version == one_pt_one() {
-                        write_chunked_stream(&mut stream, reader, status_and_headers, res.trailers, compression);
+                        write_chunked_stream(&mut stream, reader, status_and_headers, trailers, compression);
                     } else {
                         if compression.is_none() {
                             let mut chain = status_and_headers.as_bytes().chain(reader);
@@ -692,9 +684,10 @@ fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, 
             stream.write(status_headers_and_body.as_slice()).unwrap();
         } else {
             let mut writer = Vec::new();
-            writer.extend_from_slice(status_and_headers.as_bytes());
             compress(&compression, &mut writer, body.as_bytes());
-            stream.write(&writer).unwrap();
+            let mut whole = status_and_headers.as_bytes().to_vec();
+            whole.append(&mut writer);
+            stream.write(&whole).unwrap();
         }
     }
 }
@@ -860,7 +853,7 @@ pub fn most_desired_encoding(str: Option<String>) -> Option<String> {
         ranked.sort_by(|x, y| x.1.parse::<f32>().unwrap().partial_cmp(&y.1.parse::<f32>().unwrap()).unwrap());
         ranked.reverse();
         ranked.first().map(|x| x.0.clone())
-    }).unwrap_or(None)
+    }).unwrap_or(Some("none".to_string()))
 }
 
 
@@ -1045,42 +1038,45 @@ pub fn body_string(mut body: Body) -> String {
 }
 
 #[allow(non_snake_case)]
-#[derive(Copy, Clone)]
 pub struct RequestOptions {
     pub desired_compression: CompressionAlgorithm,
-    pub wants_trailers: bool,
-    pub compress_response_requested_in_TE: CompressionAlgorithm,
+    pub compression_from_TE_header: CompressionAlgorithm,
     pub content_encoding: CompressionAlgorithm,
+    pub wants_trailers: bool,
+    pub expected_trailers: Vec<String>
 }
 
 #[allow(non_snake_case)]
 impl RequestOptions {
     pub fn from(headers: &Headers) -> RequestOptions {
-        let desired_compression = compression_from(
-            headers.get("Accept-Encoding")
-                .or(headers.get("Transfer-Encoding"))
-        );
-        let content_encoding = compression_from(headers.get("Content-Encoding"));
-        let TE_header = headers.get("TE");
-        let mut desired_encoding = most_desired_encoding(TE_header);
-        let str = desired_encoding.get_or_insert("none".to_string());
-        let response_compression = CompressionAlgorithm::from(str.to_string());
-
         RequestOptions {
-            desired_compression,
-            content_encoding,
-            compress_response_requested_in_TE: response_compression,
+            desired_compression: compression_from(headers.get("Accept-Encoding").or(headers.get("Transfer-Encoding"))),
+            content_encoding: compression_from(headers.get("Content-Encoding")),
+            compression_from_TE_header: compression_from(most_desired_encoding(headers.get("TE"))),
             wants_trailers: headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false),
+            expected_trailers: headers.get("Trailer").map(|ts| ts.split(", ")
+                .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
+                .map(|t| t.to_string())
+                .collect::<Vec<String>>())
+                .unwrap_or(vec!())
         }
     }
 
     pub fn response_compression(&self) -> CompressionAlgorithm {
-        if self.content_encoding.is_some() {
-            self.content_encoding
-        } else if self.desired_compression.is_some() {
+        if self.desired_compression.is_some() {
             self.desired_compression
         } else {
-            self.compress_response_requested_in_TE
+            self.compression_from_TE_header
+        }
+    }
+
+    pub fn default() -> RequestOptions {
+        RequestOptions {
+            desired_compression: NONE,
+            content_encoding: NONE,
+            compression_from_TE_header: NONE,
+            wants_trailers: false,
+            expected_trailers: vec!()
         }
     }
 }
