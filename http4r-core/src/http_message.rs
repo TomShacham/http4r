@@ -581,17 +581,18 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
     match message {
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
-            let mut headers = ensure_content_length_or_transfer_encoding(&req.headers, &req.body, chunked_encoding_desired, &req.version)
-                .unwrap_or(req.headers);
+            let has_content_length = req.headers.has("Content-Length");
+            let mut headers = ensure_content_length_or_transfer_encoding(req.headers, &req.body, &req.version, chunked_encoding_desired, has_content_length);
+            let chunked_encoding_desired = headers.has("Transfer-Encoding");
 
             let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
 
-            if chunked_encoding_desired && headers.get("Connection").map(|h| !h.contains("TE")).unwrap_or(true) {
-                headers = headers.replace(("Connection", headers.get("Connection").map(|mut h| {
-                    h.push_str(", TE");
-                    h
-                }).unwrap_or("TE".to_string()).as_str()));
-            }
+            // if chunked_encoding_desired && headers.get("Connection").map(|h| !h.contains("TE")).unwrap_or(true) {
+            //     headers = headers.replace(("Connection", headers.get("Connection").map(|mut h| {
+            //         h.push_str(", TE");
+            //         h
+            //     }).unwrap_or("TE".to_string()).as_str()));
+            // }
 
             let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
                                          req.method.value(),
@@ -614,23 +615,24 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                     if chunked_encoding_desired && req.version == one_pt_one() {
                         write_chunked_stream(stream, reader, request_string, req.trailers, compression);
                     } else {
-                        let mut chain = request_string.as_bytes().chain(reader);
                         if compression.is_none() {
+                            let mut chain = request_string.as_bytes().chain(reader);
                             let _copy = copy(&mut chain, &mut stream).unwrap();
                         } else {
-                            // todo()
-                            //  this is definitely not going to work.
-                            //  write test for this
+                            let mut writer = Vec::new();
                             let mut read = [0; 4096];
                             loop {
-                                let mut writer = Vec::new();
-                                let bytes_read = chain.read(&mut read).unwrap();
+                                let bytes_read = reader.read(&mut read).unwrap();
                                 if bytes_read == 0 {
                                     break;
                                 }
-                                compress(&compression, &mut writer, &read);
-                                stream.write(&writer).unwrap();
                             }
+                            compress(&compression, &mut writer, &read);
+                            let headers = headers.replace(("Content-Length", writer.len().to_string().as_str()));
+                            let start_line_and_headers = format!("{}{}\r\n\r\n", start_line, headers.to_wire_string());
+                            let mut whole = start_line_and_headers.as_bytes().to_vec();
+                            whole.append(&mut writer);
+                            stream.write(&whole).unwrap();
                         }
                     }
                 }
@@ -638,8 +640,8 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
         }
         HttpMessage::Response(mut res) => {
             let has_transfer_encoding = res.headers.has("Transfer-Encoding");
-            let headers = ensure_content_length_or_transfer_encoding(&res.headers, &res.body, has_transfer_encoding, &res.version)
-                .unwrap_or(res.headers);
+            let has_content_length = res.headers.has("Content-Length");
+            let headers = ensure_content_length_or_transfer_encoding(res.headers, &res.body, &res.version, has_transfer_encoding, has_content_length);
 
             let compression = request_options.response_compression();
             let headers = if headers.has("TE") {
@@ -842,14 +844,19 @@ fn write_compressed_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn 
 }
 
 
-pub fn ensure_content_length_or_transfer_encoding(headers: &Headers, body: &Body, has_transfer_encoding: bool, version: &HttpVersion) -> Option<Headers> {
-    let has_content_length = headers.has("Content-Length");
-    if !has_content_length && !has_transfer_encoding && body.is_body_string() {
-        Some(headers.add(("Content-Length", body.length().to_string().as_str())))
-    } else if !has_content_length && !has_transfer_encoding && body.is_body_stream() && version == &one_pt_one() {
-        Some(headers.add(("Transfer-Encoding", "chunked")))
+pub fn ensure_content_length_or_transfer_encoding(headers: Headers, body: &Body, version: &HttpVersion, chunked_encoding_desired: bool, has_content_length: bool) -> Headers {
+    if chunked_encoding_desired && has_content_length {
+        headers.remove("Content-Length")
+    } else if !chunked_encoding_desired && !has_content_length {
+        if body.is_body_string() {
+            headers.add(("Content-Length", body.length().to_string().as_str()))
+        } else if body.is_body_stream() && version == &one_pt_one() {
+            headers.add(("Transfer-Encoding", "chunked"))
+        } else {
+            headers
+        }
     } else {
-        None
+        headers
     }
 }
 
