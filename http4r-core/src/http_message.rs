@@ -595,18 +595,23 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                                      req.version.major,
                                      req.version.minor);
 
-            let request_string = format!("{}{}\r\n\r\n", start_line, headers.to_wire_string());
+            let start_line_and_headers = format!("{}{}\r\n\r\n", start_line, headers.to_wire_string());
 
             match req.body {
                 BodyString(str) => {
-                    write_body_string(stream, compression, request_string, chunked_encoding_desired, str, req.version == one_pt_one(), req.trailers, headers, start_line)
+                    let is_version_1_1 = req.version == one_pt_one();
+                    if chunked_encoding_desired && is_version_1_1 {
+                        write_chunked_string(stream, start_line_and_headers, str.as_bytes(), req.trailers, compression);
+                    } else {
+                        write_compressed_string(stream, &compression, start_line_and_headers, str, headers, start_line)
+                    }
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && req.version == one_pt_one() {
-                        write_chunked_stream(stream, reader, request_string, req.trailers, compression);
+                        write_chunked_stream(stream, reader, start_line_and_headers, req.trailers, compression);
                     } else {
                         if compression.is_none() {
-                            let mut chain = request_string.as_bytes().chain(reader);
+                            let mut chain = start_line_and_headers.as_bytes().chain(reader);
                             let _copy = copy(&mut chain, &mut stream).unwrap();
                         } else {
                             let mut writer = Vec::new();
@@ -657,7 +662,11 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
 
             match res.body {
                 BodyString(str) => {
-                    write_body_string(stream, compression, status_and_headers, chunked_encoding_desired, str, res.version == one_pt_one(), trailers, headers, start_line)
+                    if chunked_encoding_desired && (res.version == one_pt_one()) {
+                        write_chunked_string(stream, status_and_headers, str.as_bytes(), trailers, compression);
+                    } else {
+                        write_compressed_string(stream, &compression, status_and_headers, str, headers, start_line)
+                    }
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && res.version == one_pt_one() {
@@ -696,15 +705,7 @@ fn set_connection_header_if_needed_and_not_present(headers: Headers, chunked_enc
     }
 }
 
-fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, start_line_and_headers: String, chunked_encoding_desired: bool, body: &str, is_version_1_1: bool, trailers: Headers, headers: Headers, mut start_line: String) {
-    if chunked_encoding_desired && is_version_1_1 {
-        write_chunked_string(stream, start_line_and_headers, body.as_bytes(), trailers, compression);
-    } else {
-        write_compressed_string(stream, &compression, start_line_and_headers, body, headers, &mut start_line)
-    }
-}
-
-fn write_compressed_string(stream: &mut TcpStream, compression: &CompressionAlgorithm, start_line_and_headers: String, body: &str, headers: Headers, start_line: &mut String) {
+fn write_compressed_string(stream: &mut TcpStream, compression: &CompressionAlgorithm, start_line_and_headers: String, body: &str, headers: Headers, start_line: String) {
     if compression.is_none() {
         let status_headers_and_body = [start_line_and_headers.as_bytes(), body.as_bytes()].concat();
         stream.write(status_headers_and_body.as_slice()).unwrap();
@@ -712,6 +713,7 @@ fn write_compressed_string(stream: &mut TcpStream, compression: &CompressionAlgo
         let mut writer = Vec::new();
         compress(&compression, &mut writer, body.as_bytes());
         let headers = headers.replace(("Content-Length", writer.len().to_string().as_str()));
+        let mut start_line = start_line;
         start_line.push_str(headers.to_wire_string().as_str());
         start_line.push_str("\r\n\r\n");
         let mut whole = start_line.as_bytes().to_vec();
