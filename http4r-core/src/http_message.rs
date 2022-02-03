@@ -587,12 +587,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
 
             let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));
 
-            // if chunked_encoding_desired && headers.get("Connection").map(|h| !h.contains("TE")).unwrap_or(true) {
-            //     headers = headers.replace(("Connection", headers.get("Connection").map(|mut h| {
-            //         h.push_str(", TE");
-            //         h
-            //     }).unwrap_or("TE".to_string()).as_str()));
-            // }
+            let headers = set_connection_header_if_needed_and_not_present(headers, chunked_encoding_desired);
 
             let request_string = format!("{} {} HTTP/{}.{}\r\n{}\r\n\r\n",
                                          req.method.value(),
@@ -692,6 +687,17 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                 }
             }
         }
+    }
+}
+
+fn set_connection_header_if_needed_and_not_present(headers: Headers, chunked_encoding_desired: bool) -> Headers {
+    if chunked_encoding_desired && headers.get("Connection").map(|h| !h.contains("TE")).unwrap_or(true) {
+        headers.replace(("Connection", headers.get("Connection").map(|mut h| {
+            h.push_str(", TE");
+            h
+        }).unwrap_or("TE".to_string()).as_str()))
+    } else {
+        headers
     }
 }
 
