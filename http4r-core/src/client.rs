@@ -42,8 +42,7 @@ impl Handler for Client {
             &mut headers_writer,
             &mut chunks_writer,
             &mut compress_writer,
-            &mut trailers_writer,
-            None
+            &mut trailers_writer
         );
 
         let response = match result {

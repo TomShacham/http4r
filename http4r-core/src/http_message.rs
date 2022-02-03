@@ -72,7 +72,6 @@ pub fn read_message_from_wire<'a>(
     chunks_writer: &'a mut Vec<u8>,
     compress_writer: &'a mut Vec<u8>,
     trailers_writer: &'a mut Vec<u8>,
-    request_options: Option<RequestOptions>,
 ) -> Result<HttpMessage<'a>, MessageError> {
     let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
         read(&mut stream, &mut reader, &mut start_line_writer, 0, 0, None,
@@ -95,10 +94,6 @@ pub fn read_message_from_wire<'a>(
     let header_string = from_utf8(headers_writer.as_slice()).unwrap();
     let mut headers = Headers::parse_from(header_string);
 
-    let request_options = if request_options.is_some() {
-        request_options
-    } else { Some(RequestOptions::from(&headers)) };
-
     if let Err(e) = check_valid_content_length_or_transfer_encoding(&headers, is_response, method_can_have_body) {
         return Err(e);
     }
@@ -108,8 +103,11 @@ pub fn read_message_from_wire<'a>(
     }
     let is_version_1_0 = part3 == "HTTP/1.0";
 
-    let compression = if is_response && request_options.is_some() {
-        request_options.unwrap().response_compression()
+    let request_options = RequestOptions::from(&headers);
+    let compression = if is_response {
+        request_options.response_compression()
+    } else if is_request {
+        request_options.content_encoding
     } else { NONE };
 
     let content_length = headers.content_length_header();
@@ -275,7 +273,7 @@ fn simple_body<'a>(
     method_can_have_body: bool,
     content_length: Option<Result<usize, String>>,
     compression: CompressionAlgorithm,
-    mut compress_writer: &'a mut Vec<u8>
+    mut compress_writer: &'a mut Vec<u8>,
 ) -> Result<(Body<'a>, Headers, usize), MessageError> {
     let bytes_left_in_reader = read_bytes_from_stream - up_to_in_reader;
     let (body, content_length) = match content_length {
@@ -533,6 +531,15 @@ impl CompressionAlgorithm {
         }
     }
 
+    pub fn or(self, next: CompressionAlgorithm) -> CompressionAlgorithm {
+        match self {
+            GZIP => self,
+            BROTLI => self,
+            DEFLATE => self,
+            NONE => next
+        }
+    }
+
     pub fn is_some(&self) -> bool {
         !self.is_none()
     }
@@ -593,9 +600,15 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                                          req.version.minor,
                                          headers.to_wire_string());
 
+            let start_line = format!("{} {} HTTP/{}.{}\r\n",
+                                     req.method.value(),
+                                     req.uri.to_string(),
+                                     req.version.major,
+                                     req.version.minor);
+
             match req.body {
                 BodyString(str) => {
-                    write_body_string(stream, compression, request_string, chunked_encoding_desired, str, req.version == one_pt_one(), req.trailers)
+                    write_body_string(stream, compression, request_string, chunked_encoding_desired, str, req.version == one_pt_one(), req.trailers, headers, start_line)
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && req.version == one_pt_one() {
@@ -605,6 +618,9 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                         if compression.is_none() {
                             let _copy = copy(&mut chain, &mut stream).unwrap();
                         } else {
+                            // todo()
+                            //  this is definitely not going to work.
+                            //  write test for this
                             let mut read = [0; 4096];
                             loop {
                                 let mut writer = Vec::new();
@@ -643,11 +659,13 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
             }
 
             let status_and_headers: String = Response::status_line_and_headers_wire_string(&headers, &res.status);
+            let start_line = format!("HTTP/1.1 {} {}\r\n", &res.status.value(), &res.status.to_string());
+
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
 
             match res.body {
                 BodyString(str) => {
-                    write_body_string(stream, compression, status_and_headers, chunked_encoding_desired, str, res.version == one_pt_one(), trailers)
+                    write_body_string(stream, compression, status_and_headers, chunked_encoding_desired, str, res.version == one_pt_one(), trailers, headers, start_line)
                 }
                 BodyStream(ref mut reader) => {
                     if chunked_encoding_desired && res.version == one_pt_one() {
@@ -675,17 +693,20 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
     }
 }
 
-fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, status_and_headers: String, chunked_encoding_desired: bool, body: &str, is_version_1_1: bool, trailers: Headers) {
+fn write_body_string(stream: &mut TcpStream, compression: CompressionAlgorithm, start_line_and_headers: String, chunked_encoding_desired: bool, body: &str, is_version_1_1: bool, trailers: Headers, headers: Headers, mut start_line: String) {
     if chunked_encoding_desired && is_version_1_1 {
-        write_chunked_string(stream, status_and_headers, body.as_bytes(), trailers, compression);
+        write_chunked_string(stream, start_line_and_headers, body.as_bytes(), trailers, compression);
     } else {
-        let status_headers_and_body = [status_and_headers.as_bytes(), body.as_bytes()].concat();
         if compression.is_none() {
+            let status_headers_and_body = [start_line_and_headers.as_bytes(), body.as_bytes()].concat();
             stream.write(status_headers_and_body.as_slice()).unwrap();
         } else {
             let mut writer = Vec::new();
             compress(&compression, &mut writer, body.as_bytes());
-            let mut whole = status_and_headers.as_bytes().to_vec();
+            let headers = headers.replace(("Content-Length", writer.len().to_string().as_str()));
+            start_line.push_str(headers.to_wire_string().as_str());
+            start_line.push_str("\r\n\r\n");
+            let mut whole = start_line.as_bytes().to_vec();
             whole.append(&mut writer);
             stream.write(&whole).unwrap();
         }
@@ -1043,7 +1064,7 @@ pub struct RequestOptions {
     pub compression_from_TE_header: CompressionAlgorithm,
     pub content_encoding: CompressionAlgorithm,
     pub wants_trailers: bool,
-    pub expected_trailers: Vec<String>
+    pub expected_trailers: Vec<String>,
 }
 
 #[allow(non_snake_case)]
@@ -1058,16 +1079,14 @@ impl RequestOptions {
                 .filter(|t| !DISALLOWED_TRAILERS.contains(&&*t.to_lowercase()))
                 .map(|t| t.to_string())
                 .collect::<Vec<String>>())
-                .unwrap_or(vec!())
+                .unwrap_or(vec!()),
         }
     }
 
     pub fn response_compression(&self) -> CompressionAlgorithm {
-        if self.desired_compression.is_some() {
-            self.desired_compression
-        } else {
-            self.compression_from_TE_header
-        }
+        self.content_encoding
+            .or(self.desired_compression)
+            .or(self.compression_from_TE_header)
     }
 
     pub fn default() -> RequestOptions {
@@ -1076,7 +1095,7 @@ impl RequestOptions {
             content_encoding: NONE,
             compression_from_TE_header: NONE,
             wants_trailers: false,
-            expected_trailers: vec!()
+            expected_trailers: vec!(),
         }
     }
 }

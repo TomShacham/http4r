@@ -88,7 +88,6 @@ If you are using this software for profit, please donate.".trim());
             &mut chunks_writer,
             &mut compress_writer,
             &mut trailers_writer,
-            None,
         );
 
         match result {

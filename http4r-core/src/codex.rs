@@ -20,7 +20,7 @@ impl Codex {
                 let mut encoder = brotli::CompressorReader::new(reader, reader.len(), 5, 10);
                 encoder.read_to_end(writer).unwrap();
             }
-            CompressionAlgorithm::NONE => {}
+            CompressionAlgorithm::NONE => panic!("Cannot decode with no compression algorithmw")
         }
     }
 
@@ -38,7 +38,7 @@ impl Codex {
                 let mut writer = brotli::DecompressorWriter::new(writer, reader.len());
                 writer.write(reader).unwrap();
             }
-            CompressionAlgorithm::NONE => {}
+            CompressionAlgorithm::NONE => panic!("Cannot decode with no compression algorithmw")
         }
 
     }

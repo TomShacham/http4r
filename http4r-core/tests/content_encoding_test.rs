@@ -37,6 +37,33 @@ mod tests {
         })
     }
 
-    // test that we can send an already encoded message
+    #[test]
+    fn client_can_send_a_compressed_message() {
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassThroughHandler {}) });
+
+        let mut client = Client::new("127.0.0.1", server.port, None);
+        let headers = Headers::from(vec!(("Content-Encoding", "br")));
+        let body = "Some quite long body".repeat(1000);
+
+        let request = Request::post(
+            Uri::parse("/"),
+            headers,
+            BodyString(body.as_str()));
+
+        client.handle(request, |res| {
+            assert_eq!(res.status, OK);
+            assert_eq!(body, body_string(res.body));
+            assert_eq!(res.headers.vec, vec!(
+                ("Content-Encoding".to_string(), "br".to_string()),
+                ("Content-Length".to_string(), "20000".to_string()),
+            ));
+        })
+
+    }
+
+
+    // test all compression flows through write body
+    
     // test precedence of Content-Encoding, Transfer-Encoding, TE and Accept-Encoding
 }
