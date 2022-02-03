@@ -18,7 +18,7 @@ mod tests {
         server.test(|| { Ok(PassThroughHandler {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
-        let headers = Headers::from(vec!(("Accept-Encoding", "br, gzip, deflate")));
+        let headers = Headers::from(vec!(("Accept-Encoding", "gzip, deflate, br")));
         let body = "Some quite long body".repeat(1000);
 
         let request = Request::post(
@@ -30,8 +30,9 @@ mod tests {
             assert_eq!(res.status, OK);
             assert_eq!(body, body_string(res.body));
             assert_eq!(res.headers.vec, vec!(
+                ("Accept-Encoding".to_string(), "gzip, deflate, br".to_string()),
+                ("Content-Length".to_string(), "20000".to_string()),
                 ("Content-Encoding".to_string(), "br".to_string()),
-                ("Content-Length".to_string(), "32".to_string())
             ));
         })
     }

@@ -18,7 +18,7 @@ impl Codex {
             }
             CompressionAlgorithm::BROTLI => {
                 let mut encoder = brotli::CompressorReader::new(reader, reader.len(), 5, 10);
-                encoder.read_to_end(writer);
+                encoder.read_to_end(writer).unwrap();
             }
             CompressionAlgorithm::NONE => {}
         }
@@ -36,7 +36,7 @@ impl Codex {
             }
             CompressionAlgorithm::BROTLI => {
                 let mut writer = brotli::DecompressorWriter::new(writer, reader.len());
-                writer.write(reader);
+                writer.write(reader).unwrap();
             }
             CompressionAlgorithm::NONE => {}
         }
