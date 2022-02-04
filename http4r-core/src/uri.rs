@@ -1,5 +1,4 @@
 use std::fmt;
-use lazy_static::lazy_static;
 use regex::Regex;
 
 #[derive(PartialEq, Debug, Copy, Clone)]
@@ -11,11 +10,10 @@ pub struct Uri<'a> {
     pub fragment: Option<&'a str>,
 }
 
+
 impl<'a> Uri<'a> {
     pub fn parse(value: &'a str) -> Uri<'a> {
-        lazy_static! {
-            static ref RFC3986: Regex = Regex::new("^(?:([^:/?\\#]+):)?(?://([^/?\\#]*))?([^?\\#]*)(?:\\?([^\\#]*))?(?:\\#(.*))?").unwrap();
-        }
+        let RFC3986: Regex = Regex::new("^(?:([^:/?\\#]+):)?(?://([^/?\\#]*))?([^?\\#]*)(?:\\?([^\\#]*))?(?:\\#(.*))?").unwrap();
 
         let result = RFC3986.captures(value).unwrap();
         Uri {

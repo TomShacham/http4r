@@ -53,10 +53,8 @@ Open the project in CLion and Salisbury's your Uncle.
     - read and write to database
 ---
 - core api
-  - support compression - test simple body compression eg using content encoding and accept encoding
-  - content negotiation test - eg Accept-Encoding header then server sets Content-Encoding and client decodes
-  - limits on headers and body etc tests // sort out these vecs that are being allocated
   - support multipart form data and application url form encoded 
+  - limits on headers and body etc tests // sort out these vecs that are being allocated
   - publish crate
   - example app with WASM example
   - write docs

@@ -60,6 +60,7 @@ pub fn serve(req: JSRequest) -> JSResponse {
     let mut app = ExampleApp::new(LoggingHttpHandler::new(ConsoleLogger {}, WasmClock {}, Router {}));
     let request = Request {
         headers: Headers::js_headers_from_string(&req.headers),
+        trailers: Headers::empty(),
         method: Method::from(&req.method),
         uri: Uri::parse(&req.uri),
         body: BodyString(req.body.as_str()),
