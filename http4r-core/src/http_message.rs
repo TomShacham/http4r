@@ -655,7 +655,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                 trailers = Headers::empty();
             }
 
-            if compression.is_some() {
+            if request_options.desired_content_encoding.is_some() {
                 headers = headers.replace(("Content-Encoding", compression.to_string_for_content_encoding().as_str()));
             }
 
@@ -1075,7 +1075,8 @@ pub fn body_string(mut body: Body) -> String {
 
 #[allow(non_snake_case)]
 pub struct RequestOptions {
-    pub desired_compression: CompressionAlgorithm,
+    pub desired_content_encoding: CompressionAlgorithm,
+    pub desired_transfer_encoding: CompressionAlgorithm,
     pub compression_from_TE_header: CompressionAlgorithm,
     pub content_encoding: CompressionAlgorithm,
     pub wants_trailers: bool,
@@ -1086,7 +1087,8 @@ pub struct RequestOptions {
 impl RequestOptions {
     pub fn from(headers: &Headers) -> RequestOptions {
         RequestOptions {
-            desired_compression: compression_from(headers.get("Accept-Encoding").or(headers.get("Transfer-Encoding"))),
+            desired_content_encoding: compression_from(headers.get("Accept-Encoding")),
+            desired_transfer_encoding: compression_from(headers.get("Transfer-Encoding")),
             content_encoding: compression_from(headers.get("Content-Encoding")),
             compression_from_TE_header: compression_from(most_desired_encoding(headers.get("TE"))),
             wants_trailers: headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false),
@@ -1099,14 +1101,15 @@ impl RequestOptions {
     }
 
     pub fn response_compression(&self) -> CompressionAlgorithm {
-        self.desired_compression
+        self.desired_content_encoding
+            .or(self.desired_transfer_encoding)
             .or(self.compression_from_TE_header)
-            .or(self.content_encoding)
     }
 
     pub fn default() -> RequestOptions {
         RequestOptions {
-            desired_compression: NONE,
+            desired_content_encoding: NONE,
+            desired_transfer_encoding: NONE,
             content_encoding: NONE,
             compression_from_TE_header: NONE,
             wants_trailers: false,

@@ -27,6 +27,16 @@ impl Handler for PassThroughHandler {
     }
 }
 
+pub struct EchoBodyHandler {}
+
+impl Handler for EchoBodyHandler {
+    fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        let response = Response::ok(Headers::empty(), req.body);
+        fun(response);
+    }
+}
+
+
 
 pub struct PassHeadersAsBody {}
 
