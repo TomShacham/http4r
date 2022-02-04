@@ -655,6 +655,10 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                 trailers = Headers::empty();
             }
 
+            if compression.is_some() {
+                headers = headers.replace(("Content-Encoding", compression.to_string_for_content_encoding().as_str()));
+            }
+
             let start_line = format!("HTTP/1.1 {} {}\r\n", &res.status.value(), &res.status.to_string());
             let status_and_headers = format!("{}{}\r\n\r\n", start_line, headers.to_wire_string());
 
