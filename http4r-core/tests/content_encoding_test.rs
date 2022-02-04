@@ -10,7 +10,7 @@ mod tests {
     use http4r_core::http_message::Status::OK;
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
-    use crate::common::{PassThroughHandler};
+    use crate::common::{PassHeadersAsBody, PassThroughHandler};
 
     #[test]
     fn encode_body_using_accept_encoding_prefers_brotli() {
@@ -84,10 +84,32 @@ mod tests {
                 ("Transfer-Encoding".to_string(), "brotli, chunked".to_string()),
             ));
         })
-
     }
 
-    // test all compression flows through write body
-    
-    // test precedence of Content-Encoding, Transfer-Encoding, TE and Accept-Encoding
+    #[test]
+    fn content_encoding_wins_over_accept_encoding_which_wins_over_transfer_encoding() {
+        let mut server = Server::new(0);
+        server.test(|| { Ok(PassHeadersAsBody {}) });
+
+        let mut client = Client::new("127.0.0.1", server.port, None);
+        let headers = Headers::from(vec!(
+            ("Transfer-Encoding", "gzip, chunked"),
+            ("Accept-Encoding", "gzip, deflate"),
+            ("Content-Encoding", "br"),
+        ));
+
+        let request = Request::post(
+            Uri::parse("/"),
+            headers,
+            BodyStream(Box::new("Some body".as_bytes())));
+
+        client.handle(request, |res| {
+            assert_eq!("Transfer-Encoding: gzip, chunked\r\nAccept-Encoding: gzip, deflate\r\nContent-Encoding: br\r\nConnection: TE", body_string(res.body));
+            assert_eq!(res.status, OK);
+            assert_eq!(res.headers.vec, vec!(
+                ("Transfer-Encoding".to_string(), "gzip, chunked".to_string()),
+                ("Content-Encoding".to_string(), "gzip".to_string()),
+            ));
+        })
+    }
 }

@@ -748,28 +748,25 @@ fn decompress<'a>(compression: &'a CompressionAlgorithm, writer: &'a mut Vec<u8>
 }
 
 pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chunk: &[u8], trailers: Headers, compression: CompressionAlgorithm) {
-    let length = chunk.len().to_string();
-
-    first_line.push_str(length.as_str());
-    first_line.push_str("\r\n");
     let mut writer = Vec::new();
-    let chunk = if !compression.is_none() {
+    let mut request = Vec::new();
+    if compression.is_some() {
         compress(&compression, &mut writer, chunk);
-        writer.as_slice()
+        write_chunk_metadata(&mut first_line, writer.len().to_string());
+        request = [first_line.as_bytes(), writer.as_slice(), "\r\n0\r\n".as_bytes()].concat();
     } else {
-        chunk
-    };
-    let mut request = [
-        first_line.as_bytes(),
-        chunk,
-        "\r\n0\r\n".as_bytes()
-    ].concat();
-
+        write_chunk_metadata(&mut first_line, chunk.len().to_string());
+        request = [first_line.as_bytes(), chunk, "\r\n0\r\n".as_bytes()].concat();
+    }
     if !trailers.is_empty() {
         request.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
     }
-
     stream.write(request.as_slice()).unwrap();
+}
+
+fn write_chunk_metadata(first_line: &mut String, length: String) {
+    first_line.push_str(length.as_str());
+    first_line.push_str("\r\n");
 }
 
 /*
@@ -1098,9 +1095,9 @@ impl RequestOptions {
     }
 
     pub fn response_compression(&self) -> CompressionAlgorithm {
-        self.content_encoding
-            .or(self.desired_compression)
+        self.desired_compression
             .or(self.compression_from_TE_header)
+            .or(self.content_encoding)
     }
 
     pub fn default() -> RequestOptions {
