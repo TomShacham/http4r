@@ -10,7 +10,7 @@ mod tests {
     use http4r_core::http_message::Status::OK;
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
-    use crate::common::{EchoBodyHandler, PassHeadersAsBody, PassThroughHandler};
+    use crate::common::{EchoBodyHandler, PassThroughHandler};
 
     #[test]
     fn encode_body_using_accept_encoding_prefers_brotli() {

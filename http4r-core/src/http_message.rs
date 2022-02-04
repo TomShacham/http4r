@@ -120,7 +120,7 @@ pub fn read_message_from_wire<'a>(
     if result.is_err() {
         return Err(result.err().unwrap());
     }
-    let (body, mut trailers, content_length) = result.unwrap();
+    let (body, trailers, content_length) = result.unwrap();
 
     if headers.get("Transfer-Encoding").is_none() {
         headers = headers.replace(("Content-Length", content_length.to_string().as_str()));
@@ -582,7 +582,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
         HttpMessage::Request(mut req) => {
             let chunked_encoding_desired = req.headers.has("Transfer-Encoding");
             let has_content_length = req.headers.has("Content-Length");
-            let mut headers = ensure_content_length_or_transfer_encoding(req.headers, &req.body, &req.version, chunked_encoding_desired, has_content_length);
+            let headers = ensure_content_length_or_transfer_encoding(req.headers, &req.body, &req.version, chunked_encoding_desired, has_content_length);
             let chunked_encoding_desired = headers.has("Transfer-Encoding");
 
             let compression = compression_from(headers.get("Content-Encoding").or(headers.get("Transfer-Encoding")));

@@ -11,6 +11,7 @@ pub struct Uri<'a> {
 }
 
 
+#[allow(non_snake_case)]
 impl<'a> Uri<'a> {
     pub fn parse(value: &'a str) -> Uri<'a> {
         let RFC3986: Regex = Regex::new("^(?:([^:/?\\#]+):)?(?://([^/?\\#]*))?([^?\\#]*)(?:\\?([^\\#]*))?(?:\\#(.*))?").unwrap();
