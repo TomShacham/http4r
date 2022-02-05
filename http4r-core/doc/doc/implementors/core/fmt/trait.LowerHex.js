@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["brotli"] = [{"text":"impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.LowerHex.html\" title=\"trait core::fmt::LowerHex\">LowerHex</a> for <a class=\"struct\" href=\"brotli/enc/input_pair/struct.InputPair.html\" title=\"struct brotli::enc::input_pair::InputPair\">InputPair</a>&lt;'a&gt;","synthetic":false,"types":["brotli::enc::input_pair::InputPair"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
