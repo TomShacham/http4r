@@ -5,6 +5,10 @@ set -x
 echo "******** build and test *********"
 cargo test
 
+pushd http4r-core
+crate doc --target-dir doc
+popd
+
 echo "******** building WASM *********"
 pushd http4r-browser
 wasm-pack --verbose build --target web
