@@ -56,6 +56,8 @@ Open the project in CLion and Salisbury's your Uncle.
   - support multipart form data and application url form encoded 
   - limits on headers and body etc tests // sort out these vecs that are being allocated
   - publish crate
+  - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
+  - default response headers, content-type, content-length, date
   - example app with WASM example
   - checkout browsix
   - write docs
@@ -63,10 +65,7 @@ Open the project in CLion and Salisbury's your Uncle.
   - if version is known to be 1.0 then do not send chunked message
     - stream into memory and forward as content-length 
     - support http/1.0 - ie. read til socket close or EOF
-  - multipart form data
   - client to use Host header eg Dan's
-  - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
-  - default response headers, content-type, content-length, date
   - support Connection: close
   - bidi routing 
   - support http/2.0
