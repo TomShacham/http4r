@@ -16,7 +16,7 @@ mod tests {
     use http4r_example_app::app::App;
 
     #[test]
-    fn start_stop() {
+    fn home_page() {
         let mut server = Server::new(0);
         server.test(|| {
             let app = App::new();
