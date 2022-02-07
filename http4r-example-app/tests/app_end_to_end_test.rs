@@ -41,7 +41,7 @@ mod tests {
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         client.handle(Request::get(Uri::parse("/some/unknown/file.html"), Headers::empty()), |res| {
-            assert_eq!(body_string(res.body), "Not found.")
+            approve(body_string(res.body), "./resources/html/not-found.html");
         })
     }
 }

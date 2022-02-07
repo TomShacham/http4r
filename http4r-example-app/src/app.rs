@@ -1,5 +1,6 @@
 use std::fs;
 use std::fs::File;
+use std::io::ErrorKind::NotFound;
 use std::io::Read;
 use std::str::from_utf8;
 use http4r_core::handler::Handler;
@@ -7,6 +8,7 @@ use http4r_core::headers::Headers;
 use http4r_core::http_message::{Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::uri::Uri;
+use crate::not_found_handler::NotFoundHandler;
 use crate::static_file_handler::StaticFileHandler;
 
 pub struct App<H> where H: Handler {
@@ -29,10 +31,10 @@ impl<H> Handler for App<H> where H: Handler {
     }
 }
 
-impl<'a> App<StaticFileHandler<'a>> {
-    pub fn in_memory() -> App<StaticFileHandler<'a>> {
+impl<'a> App<NotFoundHandler<StaticFileHandler<'a>>> {
+    pub fn in_memory() -> App<NotFoundHandler<StaticFileHandler<'a>>> {
         App {
-            handler: StaticFileHandler::new("./resources/html")
+            handler: NotFoundHandler::new(StaticFileHandler::new("./resources/html"))
         }
     }
 }
