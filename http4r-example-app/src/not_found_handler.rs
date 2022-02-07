@@ -6,9 +6,10 @@ use http4r_core::http_message::Body::BodyString;
 use http4r_core::http_message::Status::NotFound;
 
 pub struct NotFoundHandler<H> where H: Handler {
-    handler: H
+    handler: H,
 }
-impl<H> NotFoundHandler<H> where H : Handler {
+
+impl<H> NotFoundHandler<H> where H: Handler {
     pub fn new(handler: H) -> NotFoundHandler<H> {
         NotFoundHandler {
             handler
@@ -20,7 +21,9 @@ impl<H> Handler for NotFoundHandler<H> where H: Handler {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
         self.handler.handle(req, |res| {
             if res.status == NotFound {
-                let not_found = fs::read_to_string("./resources/html/not-found.html").unwrap();
+                let tld = std::env::current_dir().unwrap();
+                let tld = tld.to_str().unwrap();
+                let not_found = fs::read_to_string(tld.clone().to_string() + "/http4r-example-app/resources/html/not-found.html").unwrap();
                 fun(Response::not_found(Headers::empty(), BodyString(not_found.as_str())))
             } else {
                 fun(res)
