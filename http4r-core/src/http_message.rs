@@ -26,7 +26,7 @@ use crate::headers::{DISALLOWED_TRAILERS, Headers};
 use crate::http_message::Body::{BodyStream, BodyString};
 use crate::http_message::CompressionAlgorithm::{BROTLI, DEFLATE, GZIP, NONE};
 use crate::http_message::Method::{CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE};
-use crate::http_message::Status::{BadRequest, InternalServerError, LengthRequired, MovedPermanently, NotFound, OK, Unknown};
+use crate::http_message::Status::{BadRequest, Forbidden, InternalServerError, LengthRequired, MovedPermanently, NotFound, OK, Unknown};
 use crate::uri::Uri;
 
 pub enum HttpMessage<'a> {
@@ -1183,6 +1183,10 @@ impl<'a> Response<'a> {
         Response { headers, body, status: NotFound, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
 
+    pub fn forbidden(headers: Headers, body: Body) -> Response {
+        Response { headers, body, status: Forbidden, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
+    }
+
     pub fn moved_permanently(headers: Headers, body: Body) -> Response {
         Response { headers, body, status: MovedPermanently, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
     }
@@ -1225,6 +1229,7 @@ pub enum Status {
     BadRequest = 400,
     LengthRequired = 411,
     NotFound = 404,
+    Forbidden = 403,
     InternalServerError = 500,
     Unknown = 0,
 }
@@ -1235,6 +1240,7 @@ impl Status {
             OK => "OK".to_string(),
             MovedPermanently => "Moved Permanently".to_string(),
             NotFound => "Not Found".to_string(),
+            Forbidden => "Forbidden".to_string(),
             BadRequest => "Bad Request".to_string(),
             InternalServerError => "Internal Server Error".to_string(),
             _ => "Unknown".to_string()
@@ -1245,6 +1251,7 @@ impl Status {
             OK => 200,
             MovedPermanently => 301,
             BadRequest => 400,
+            Forbidden => 403,
             NotFound => 404,
             InternalServerError => 500,
             _ => 500
@@ -1253,8 +1260,11 @@ impl Status {
     pub fn from(str: &str) -> Self {
         match str.to_lowercase().as_str() {
             "200" => OK,
+            "301" => MovedPermanently,
             "400" => BadRequest,
+            "403" => Forbidden,
             "404" => NotFound,
+            "500" => InternalServerError,
             _ => Unknown
         }
     }

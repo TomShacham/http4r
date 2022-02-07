@@ -1,4 +1,5 @@
-use std::fs::File;
+use std::env;
+use std::fs::{canonicalize, File};
 use std::io::{Error, Read};
 use std::str::from_utf8;
 use http4r_core::handler::Handler;
@@ -18,7 +19,7 @@ impl<'a> StaticFileHandler<'a> {
     }
 
     fn ok_or_not_found(file: Result<File, Error>, mut vec: &mut Vec<u8>) -> Response {
-        let res = if file.is_err() {
+        if file.is_err() {
             Response::not_found(Headers::empty(), BodyString("Could not open file."))
         } else {
             let mut file = file.unwrap();
@@ -39,8 +40,7 @@ impl<'a> StaticFileHandler<'a> {
                     }
                 }
             }
-        };
-        res
+        }
     }
 }
 
@@ -50,8 +50,36 @@ impl<'a> Handler for StaticFileHandler<'a> {
             Request { .. } => {
                 let path = if req.uri.path == "/" {
                     self.root.to_owned() + "/index.html"
-                } else { req.uri.path.to_string() };
-                let file = File::open(path);
+                } else {
+                    self.root.to_owned() + req.uri.path.to_string().as_str()
+                };
+                let result = env::current_dir();
+                if result.is_err() {
+                    fun(Response::internal_server_error(Headers::empty(), BodyString("Failed to get current directory, perhaps insufficient permissions.")));
+                    return;
+                }
+                let current_dir = result.unwrap();
+                let full_root = current_dir.to_str().unwrap().to_string() + "/" + self.root;
+                let result = canonicalize(full_root.clone());
+                if result.is_err() {
+                    fun(Response::not_found(Headers::empty(), BodyString("File does not exist.")));
+                    return;
+                }
+                let canonical_root = result.unwrap();
+                let result = canonicalize(path);
+                if result.is_err() {
+                    fun(Response::not_found(Headers::empty(), BodyString("File does not exist.")));
+                    return;
+                }
+                let canonical_path = result.unwrap();
+                let canonical_path_str = canonical_path.to_str().unwrap();
+                if !canonical_path_str.starts_with(&canonical_root.to_str().unwrap()) {
+                    let string = "Attempted to access a file outside of root: ".to_string() + canonical_path_str;
+                    fun(Response::forbidden(Headers::empty(), BodyString(string.as_str())));
+                    return;
+                }
+                println!("StaticFileHandler trying to open file at {}", canonical_path_str);
+                let file = File::open(canonical_path_str);
                 let mut vec = Vec::new();
                 let res = Self::ok_or_not_found(file, &mut vec);
                 fun(res);
