@@ -39,7 +39,7 @@ impl Server where {
 This program comes with ABSOLUTELY NO WARRANTY.
 This is free software, and you are welcome to redistribute it
 under certain conditions.
-If you are using this software for profit, please donate.".trim());
+If you are using this software for profit, please consider sponsorship :-)".trim());
         let handler = Arc::new(fun);
 
         let pool = ThreadPool::new(10 as usize);
@@ -118,5 +118,4 @@ If you are using this software for profit, please donate.".trim());
 
         stream.flush().unwrap();
     }
-
 }
