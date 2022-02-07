@@ -7,6 +7,7 @@ use http4r_core::headers::Headers;
 use http4r_core::http_message::{Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::uri::Uri;
+use crate::static_file_handler::StaticFileHandler;
 
 pub struct App<H> where H: Handler {
     handler: H,
@@ -25,5 +26,13 @@ impl<H> Handler for App<H> where H: Handler {
         self.handler.handle(req, |res| {
             fun(res)
         })
+    }
+}
+
+impl<'a> App<StaticFileHandler<'a>> {
+    pub fn in_memory() -> App<StaticFileHandler<'a>> {
+        App {
+            handler: StaticFileHandler::new("./resources/html")
+        }
     }
 }

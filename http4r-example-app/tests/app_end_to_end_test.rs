@@ -24,13 +24,24 @@ mod tests {
     use crate::common::approve;
 
     #[test]
-    fn static_file_handler() {
+    fn static_file_handler_home_page() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(App::new(StaticFileHandler::new("./resources/html"))) });
+        server.test(|| { Ok(App::in_memory()) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         client.handle(Request::get(Uri::parse("/"), Headers::empty()), |res| {
             approve(body_string(res.body), "./resources/html/index.html");
+        })
+    }
+
+    #[test]
+    fn file_not_found_results_in_404(){
+        let mut server = Server::new(0);
+        server.test(|| { Ok(App::in_memory()) });
+
+        let mut client = Client::new("127.0.0.1", server.port, None);
+        client.handle(Request::get(Uri::parse("/some/unknown/file.html"), Headers::empty()), |res| {
+            assert_eq!(body_string(res.body), "Not found.")
         })
     }
 }

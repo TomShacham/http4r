@@ -11,7 +11,7 @@ pub struct StaticFileHandler<'a> {
     root: &'a str
 }
 impl<'a> StaticFileHandler<'a> {
-    pub fn new(root: &'a str) -> StaticFileHandler {
+    pub fn new(root: &'a str) -> StaticFileHandler<'a> {
         StaticFileHandler {
             root
         }
@@ -56,7 +56,6 @@ impl<'a> Handler for StaticFileHandler<'a> {
                 let res = Self::ok_or_not_found(file, &mut vec);
                 fun(res);
             }
-            _ => fun(Response::not_found(Headers::empty(), BodyString("Not found.")))
         }
     }
 }
