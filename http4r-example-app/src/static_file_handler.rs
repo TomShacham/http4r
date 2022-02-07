@@ -7,14 +7,17 @@ use http4r_core::headers::Headers;
 use http4r_core::http_message::{Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::uri::Uri;
+use crate::environment::Environment;
 
 pub struct StaticFileHandler<'a> {
-    root: &'a str
+    root: &'a str,
+    pub env_name: String,
 }
 impl<'a> StaticFileHandler<'a> {
-    pub fn new(root: &'a str) -> StaticFileHandler<'a> {
+    pub fn new(root: &'a str, env_name: String) -> StaticFileHandler<'a> {
         StaticFileHandler {
-            root
+            root,
+            env_name
         }
     }
 
@@ -49,31 +52,27 @@ impl<'a> Handler for StaticFileHandler<'a> {
         match req {
             Request { .. } => {
                 let path = if req.uri.path == "/" {
-                    self.root.to_owned() + "/index.html"
+                    "/index.html".to_string()
                 } else {
-                    self.root.to_owned() + req.uri.path.to_string().as_str()
+                    req.uri.path.to_string()
                 };
                 let result = env::current_dir();
                 if result.is_err() {
                     fun(Response::internal_server_error(Headers::empty(), BodyString("Failed to get current directory, perhaps insufficient permissions.")));
                     return;
                 }
-                let current_dir = result.unwrap();
-                let full_root = current_dir.to_str().unwrap().to_string() + "/" + self.root;
-                let result = canonicalize(full_root.clone());
-                if result.is_err() {
-                    fun(Response::not_found(Headers::empty(), BodyString("File does not exist.")));
-                    return;
-                }
-                let canonical_root = result.unwrap();
-                let result = canonicalize(path);
+                let current_dir_plus_root = if self.env_name != "test" {
+                    result.unwrap().to_str().unwrap().to_string() + "/http4r-example-app" + self.root
+                } else { result.unwrap().to_str().unwrap().to_string() + self.root };
+                let full_path = current_dir_plus_root.clone() + path.as_str();
+                let result = canonicalize(full_path.clone());
                 if result.is_err() {
                     fun(Response::not_found(Headers::empty(), BodyString("File does not exist.")));
                     return;
                 }
                 let canonical_path = result.unwrap();
                 let canonical_path_str = canonical_path.to_str().unwrap();
-                if !canonical_path_str.starts_with(&canonical_root.to_str().unwrap()) {
+                if !canonical_path_str.starts_with(&current_dir_plus_root) {
                     let string = "Attempted to access a file outside of root: ".to_string() + canonical_path_str;
                     fun(Response::forbidden(Headers::empty(), BodyString(string.as_str())));
                     return;

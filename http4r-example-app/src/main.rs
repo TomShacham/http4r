@@ -4,11 +4,14 @@ use http4r_example_app::app::App;
 use http4r_example_app::environment::Environment;
 
 fn main() {
-    let env = Environment::from(env::vars());
-    let port = env.get("PORT".to_string()).map(|p| p.1.parse().unwrap_or(0));
+    let env = Environment::from(env::vars())
+        .with(vec!(("ENV", "local")));
+    let port = env.get("PORT").map(|p| p.parse().unwrap_or(0));
     let mut server = Server::new(port.unwrap_or(0));
 
-    server.start(|| { Ok(App::production()) })
+    server.start(move || {
+        Ok(App::production(env.copy()))
+    });
 }
 
 
