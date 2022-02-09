@@ -105,8 +105,6 @@ mod tests {
 
 
 //todo() DO NOT EXPECT A CONTENT LENGTH FOR HEAD,OPTIONS,CONNECT,204,1XX ETC
-
-
 //todo() handle set-cookie especially as multiple headers of this value cannot be combined
 // with commas
 //todo() allow header for 405 method not allowed

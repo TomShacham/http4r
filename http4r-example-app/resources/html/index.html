@@ -5,25 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>http4r Example App</title>
     <script src="js/tailwind-3.0.18.js"></script>
-</head>
-<style>
-    body {
-        margin: 0;
-        padding: 0;
-    }
+    <script src="js/highlightjs.js"></script>
+    <link rel="stylesheet" href="css/highlightjs.css"/>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
 
-    .flex {display: flex;}
-    .full-width {
-        width: 100%;
-        box-sizing: border-box;
-    }
-    .bg-colour {background-color: #0a84ff;}
-    .font {
-        font-size: 16px;
-        font-family: Monaco, sans-serif;
-        color: lightgoldenrodyellow;
-    }
-</style>
+        a {
+            color: #0a84ff;
+            text-decoration: underline;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .full-width {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .bg-colour {
+            background-color: #0a84ff;
+        }
+
+        .font {
+            font-size: 16px;
+            font-family: Monaco, sans-serif;
+            color: lightgoldenrodyellow;
+        }
+
+        .doc-font {
+            font-size: 16px;
+            font-family: Monaco, sans-serif;
+            color: #0a042f;
+        }
+    </style>
+</head>
 <body>
 <div class="flex full-width justify-between bg-colour p-4 sm:p-8 font text-xs sm:text-base">
     <div>http4r</div>
@@ -33,6 +53,68 @@
         <div class="ml-4">Docs</div>
         <div class="ml-4">Recipes</div>
     </div>
+</div>
+<div class="flex p-4 sm:p-20 items-center flex-col">
+    <div class="doc-font block mb-10">
+        <a href="/">http4r</a> is a web toolkit based on <a href="https://www.http4k.org">http4k</a> and <a
+            href="https://github.com/http4t/http4t">http4t</a>,
+        which in turn draws on work by <a href="https://www.github.com/bodar">Dan</a> and his <a
+            href="https://www.github.com/bodar/utterlyidle">UtterlyIdle</a>
+        web framework.
+    </div>
+    <div class="doc-font block mb-10">
+        <div class="mb-4">The main benefits of http4r over other web frameworks:</div>
+        <ul>
+            <li class="mb-4"><b class="text-base">1</b> Simple http handler interface means you can unit test your App
+            </li>
+            <li class="mb-4"><b class="text-base">2</b> Easily extend core functionality by composing handlers</li>
+            <li class="mb-4"><b class="text-base">3</b> Symmetric client and server ie both are http handlers</li>
+            <li class="mb-4"><b class="text-base">4</b> This makes it very easy to sub in and out dependencies eg a
+                FakeThirdPartyClient {}
+            </li>
+            <li class="mb-4"><b class="text-base">5</b> All of the above make it highly testable, so we can easily TDD
+                our apps
+            </li>
+            <li class="mb-4"><b class="text-base">6</b> Even better, we can compile our App to WASM and run unit tests
+                in the browser.
+            </li>
+        </ul>
+    </div>
+    <div class="doc-font block mb-10">
+        <div class="mb-4">It is blazingly fast and uses minimal dependencies.</div>
+        <div class="mb-4">
+            It is synchronous for the sake of simplicity - if you think you need async, you don't.
+        </div>
+        <div class="mb-4">
+            And if you still need it, you don't. But if you really, really have to, use <a href="https://tokio.rs/">tokio</a>
+            :)
+        </div>
+    </div>
+    <pre><code class="hljs language-rust text-xs">trait Handler {
+    fn handle&lt;F&gt;(&amp;mut self, req: Request, fun: F) -&gt; ()
+    where F: FnOnce(Response) -&gt; () + Sized;
+}
+
+impl&lt;H&gt; Handler for NotFoundHandler&lt;H&gt; where H: Handler {
+    fn handle&lt;F&gt;(&amp;mut self, req: Request, fun: F) -&gt; () where F: FnOnce(Response) -&gt; () + Sized {
+        self.handler.handle(req, |res| {
+            if res.status == NotFound || res.status == Forbidden {
+                let result = canonicalize(&quot;/resources/html/not-found.html&quot;);
+                if result.is_err() {
+                    fun(Response::not_found(Headers::empty(), BodyString(&quot;Not found.&quot;)));
+                    return
+                }
+                let canonical = result.unwrap();
+                println!(&quot;opening {}&quot;, canonical.to_str().unwrap());
+                let not_found = fs::read_to_string(canonical.to_str().unwrap()).unwrap();
+                fun(Response::not_found(Headers::empty(), BodyString(not_found.as_str())))
+            } else {
+                fun(res)
+            }
+        })
+    }
+}
+    </code></pre>
 </div>
 </body>
 </html>

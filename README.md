@@ -51,6 +51,8 @@ Open the project in CLion and Salisbury's your Uncle.
   - local webpage that loads in wasm app and runs tests
     - JSON body parser
     - read and write to database
+    - handle cookies
+    - reach out to some 3rd party api
 ---
 - core api
   - support multipart form data and application url form encoded 
@@ -59,13 +61,14 @@ Open the project in CLion and Salisbury's your Uncle.
   - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - default response headers, content-type, content-length, date
   - example app with WASM example
-  - checkout browsix
   - write docs
+  - client to use Host header eg Dan's
+  - 
+  - checkout browsix
   - do we want to drop connections in stream.incoming() or do we want to hang onto them for a while
   - if version is known to be 1.0 then do not send chunked message
     - stream into memory and forward as content-length 
     - support http/1.0 - ie. read til socket close or EOF
-  - client to use Host header eg Dan's
   - support Connection: close
   - bidi routing 
   - support http/2.0
