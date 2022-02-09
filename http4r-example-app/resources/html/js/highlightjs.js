@@ -23,6 +23,11 @@ const tokens = {
     KEYWORD: (kw) => ({value: kw, colour: "orange", type: "KEYWORD"}),
 }
 
+function colourCode(el) {
+    let tokens = tokenise(el);
+    keyWords(tokens);
+}
+
 function tokenise(el) {
     let innerText = el.innerText;
     let prev = [];
@@ -71,21 +76,40 @@ function tokenise(el) {
 
 }
 
-function keyWord(text) {
+function keyWords(tokens) {
     const keywords = ["as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use", "where", "while", "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof", "unsized", "virtual", "yield"]
 
-    function extracted(it, token) {
-        return `${it.slice(0, it.indexOf(token) + token.length)}<div style="color: #8250df; display: inline;">${escapeHtml(it.slice(it.indexOf(token) + token.length))}</div>`;
+    let prev = [];
+    // go into state::VAR when first encountered
+    // start pushing into vec
+    // then replace prev.length tokens with one key word token
+    // if it matches a keyword.
+    for (const token of tokens) {
+        let lastToken = prev[prev.length - 1];
+        let lastTokenIsAName = lastToken !== undefined && lastToken.type === "VARIABLE_OR_STRUCT_NAME";
+        if (lastTokenIsAName && token.type === "VARIABLE_OR_STRUCT_NAME") {
+            prev.push(token);
+        } else if (lastTokenIsAName) {
+            for (let i = prev.length-1; i >= 0 ; i--) {
+                prev[i]
+            }
+        }
     }
 
-
-    function escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
 }
 
+
+
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+function writeHtml(it, token) {
+    return `${it.slice(0, it.indexOf(token) + token.length)}<div style="color: #8250df; display: inline;">${escapeHtml(it.slice(it.indexOf(token) + token.length))}</div>`;
+}
