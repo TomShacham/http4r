@@ -47,15 +47,16 @@ function tokenise(el) {
         let lastLastToken = prev[prev.length - 2];
         let currentState = state[state.length - 1];
 
-        if (char === ")" && lastToken.value === "(" && (lastLastToken.value === " " || lastLastToken.value === "\n")) {
+        if (char === ")" && lastToken !== undefined && lastToken.value === "(" && (lastLastToken !== undefined && (lastLastToken.value === " " || lastLastToken.value === "\n"))) {
             prev[prev.length-1] = tokens.OPEN_UNIT;
             prev.push(tokens.CLOSE_UNIT);
-        } else if (char === "(" && currentState === tokens.METHOD_OR_ATTRIBUTE_CALL || currentState === tokens.CLASS_METHOD_CALL_OR_TYPE_DECLARATION) {
+        } else if (char === "(" && currentState === tokens.METHOD_OR_ATTRIBUTE_CALL.type || currentState === tokens.CLASS_METHOD_CALL_OR_TYPE_DECLARATION.type) {
+            writeBuffer(buffer, tokens.NAME)
             prev.push(tokens.OPEN_FUNCTION_CALL)
             state.pop();
-        } else if (char === "\"" && lastToken.type !== tokens.STRING.type) {
+        } else if (char === "\"" && lastToken !== undefined && lastToken.type !== tokens.STRING.type) {
             prev.push(tokens.OPEN_STRING)
-        } else if (char === "\"" && lastToken.type !== tokens.ESCAPE.type) {
+        } else if (char === "\"" && lastToken !== undefined && lastToken.type !== tokens.ESCAPE.type) {
             prev.push(tokens.CLOSE_STRING)
         } else if (lastToken !== undefined && (lastToken.type === tokens.STRING.type || lastToken.type === tokens.OPEN_STRING.type)) {
             prev.push(tokens.STRING(char))
@@ -66,6 +67,7 @@ function tokenise(el) {
         } else if (lastToken !== undefined && lastToken.type === tokens.OPEN_CHAR.type) {
             prev.push(tokens.CHAR(char))
         } else if (char === "." && currentState !== tokens.METHOD_OR_ATTRIBUTE_CALL.type)  {
+            writeBuffer(buffer, tokens.NAME)
             prev.push(tokens.METHOD_OR_ATTRIBUTE_CALL);
             state.push(tokens.METHOD_OR_ATTRIBUTE_CALL.type);
         } else if (char === ">" && lastToken !== undefined && lastToken.value === "-") {
@@ -84,17 +86,20 @@ function tokenise(el) {
             state.pop();
         } else if (currentState === tokens.OPEN_TYPE_PARAMETERS.type && (char !== " " || char !== ",")) {
             prev.push(tokens.TYPE_PARAMETER(char));
-        } else if (char === ":" && lastToken !== undefined && lastToken.type === tokens.CLASS_METHOD_CALL_OR_TYPE_DECLARATION.type) {
+        } else if (char === ":" && lastToken !== undefined && lastToken.type === tokens.OPEN_TYPE_DECLARATION.type) {
             prev[prev.length - 1] = tokens.CLASS_METHOD_CALL;
+            state.pop()
             state.push(tokens.CLASS_METHOD_CALL.type);
         } else if (char === ":") {
+            writeBuffer(buffer, tokens.NAME);
             prev.push(tokens.OPEN_TYPE_DECLARATION)
             state.push(tokens.OPEN_TYPE_DECLARATION.type)
         } else if (char === " " && lastToken !== undefined && lastToken.type === tokens.OPEN_TYPE_DECLARATION.type) {
             prev.push(tokens.WHITESPACE)
         } else if ((char !== " " && char !== "," && char !== ")") && currentState === tokens.OPEN_TYPE_DECLARATION.type) {
-            prev.push(tokens.TYPE(char))
+            buffer.push(char);
         } else if (currentState === tokens.OPEN_TYPE_DECLARATION.type) {
+            writeBuffer(buffer, tokens.TYPE);
             prev.push(tokens.CLOSE_TYPE_DECLARATION(char));
             state.pop();
         } else if (char === " " && lastToken !== undefined && lastToken.type === tokens.OPEN_TYPE_DECLARATION) {
@@ -104,34 +109,22 @@ function tokenise(el) {
         } else if (char === "&") {
             prev.push(tokens.REFERENCE)
         } else if (char === "." && currentState === tokens.METHOD_OR_ATTRIBUTE_CALL.type) {
-            let word = buffer.join("")
-            prev.push(tokens.ATTRIBUTE(word))
-            buffer = [];
+            writeBuffer(buffer, tokens.ATTRIBUTE)
             prev.push(tokens.METHOD_OR_ATTRIBUTE_CALL);
         } else if ((char === " " || char === "," || char === ")") && currentState === tokens.METHOD_OR_ATTRIBUTE_CALL.type) {
             state.pop();
-            let word = buffer.join("")
-            prev.push(tokens.ATTRIBUTE(word))
-            buffer = [];
+            writeBuffer(buffer, tokens.ATTRIBUTE)
             insertTokenFrom(char)
-        } else if (char === "(" && currentState === tokens.METHOD_OR_ATTRIBUTE_CALL.type) {
+        } else if ((char === "(") && currentState === tokens.METHOD_OR_ATTRIBUTE_CALL.type) {
             state.pop();
-            let word = buffer.join("")
-            prev.push(tokens.METHOD_CALL(word))
-            buffer = [];
+            writeBuffer(buffer, tokens.METHOD_CALL)
             prev.push(tokens.OPEN_FUNCTION_CALL)
         } else if (currentState === tokens.METHOD_OR_ATTRIBUTE_CALL.type) {
             buffer.push(char)
-        } else if (char === " " && currentState === tokens.VAR_OR_STRUCT_DECLARATION.type) {
+        } else if ((char === " " || char === "(" || char === "," || char === ":" || char === "\n" || char === ".") && currentState === tokens.VAR_OR_STRUCT_DECLARATION.type) {
             state.pop();
-            let word = buffer.join("")
-            if (isKeyWord(word)) {
-                prev.push(tokens.KEYWORD(word))
-            } else {
-                prev.push(tokens.NAME(word))
-            }
-            buffer = [];
-            prev.push(tokens.WHITESPACE);
+            writeBuffer(buffer, keyWordOrName)
+            insertTokenFrom(char);
         } else if (currentState === tokens.VAR_OR_STRUCT_DECLARATION.type) {
             buffer.push(char)
         } else {
@@ -145,12 +138,27 @@ function tokenise(el) {
         }
     }
 
-    // todo() handle =, ==, !=, &&, ||
-
     return prev;
+
+    function writeBuffer(buf, f) {
+        let word = buf.join("");
+        let items = f(word);
+        console.log(f.name, items);
+        prev.push(items);
+        buffer = [];
+    }
+
+    function keyWordOrName(word) {
+        if (isKeyWord(word)) {
+            return tokens.KEYWORD(word);
+        } else {
+            return tokens.NAME(word);
+        }
+    }
 
     function insertTokenFrom(char) {
         let token = Object.keys(tokens).find(it => tokens[it].value === char);
+        // if it's not in our list of tokens then it's a name like a var or struct
         if (token === undefined) {
             prev.push(tokens.NAME(char))
         } else {
@@ -160,14 +168,10 @@ function tokenise(el) {
 
 }
 
-
-
 function isKeyWord(word) {
     const keywords = ["as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use", "where", "while", "abstract", "become", "box", "do", "final", "macro", "override", "priv", "self", "typeof", "unsized", "virtual", "yield"]
     return keywords.includes(word);
 }
-
-
 
 function escapeHtml(unsafe) {
     return unsafe
@@ -176,9 +180,4 @@ function escapeHtml(unsafe) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
-}
-
-
-function writeHtml(it, token) {
-    return `${it.slice(0, it.indexOf(token) + token.length)}<div style="color: #8250df; display: inline;">${escapeHtml(it.slice(it.indexOf(token) + token.length))}</div>`;
 }
