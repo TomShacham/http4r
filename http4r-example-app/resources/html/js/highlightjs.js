@@ -54,7 +54,7 @@ function fold(tokens) {
 }
 
 function tokenToHtml(token) {
-    return `<div class="${token.type}" style="display: inline; color: ${token.colour};">${escapeHtml(token.value)}</div>`;
+    return `<div class="${token.type}">${escapeHtml(token.value)}</div>`;
 }
 
 const tokens = {

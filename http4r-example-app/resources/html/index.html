@@ -6,43 +6,9 @@
     <title>http4r Example App</title>
     <script src="js/tailwind-3.0.18.js"></script>
     <script src="js/highlightjs.js"></script>
-    <link rel="stylesheet" href="css/highlightjs.css"/>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-        }
+    <link rel="stylesheet" href="css/some-css-file.css" type="text/css"/>
+    <link type="text/css" rel="stylesheet" href="http://fakedomain.com/smilemachine/html.css" />
 
-        a {
-            color: #0a84ff;
-            text-decoration: underline;
-        }
-
-        .flex {
-            display: flex;
-        }
-
-        .full-width {
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        .bg-colour {
-            background-color: #0a84ff;
-        }
-
-        .font {
-            font-size: 16px;
-            font-family: Monaco, sans-serif;
-            color: lightgoldenrodyellow;
-        }
-
-        .doc-font {
-            font-size: 16px;
-            font-family: Monaco, sans-serif;
-            color: #0a042f;
-        }
-    </style>
 </head>
 <body>
 <div class="flex full-width justify-between bg-colour p-4 sm:p-8 font text-xs sm:text-base">
@@ -90,29 +56,9 @@
             :)
         </div>
     </div>
-    <pre><code class="hljs language-rust text-xs">trait Handler {
+    <pre class="hidden lg:block"><code class="hljs language-rust text-xs">trait Handler {
     fn handle&lt;F&gt;(&amp;mut self, req: Request, fun: F) -&gt; ()
     where F: FnOnce(Response) -&gt; () + Sized;
-}
-
-impl&lt;H&gt; Handler for NotFoundHandler&lt;H&gt; where H: Handler {
-    fn handle&lt;F&gt;(&amp;mut self, req: Request, fun: F) -&gt; () where F: FnOnce(Response) -&gt; () + Sized {
-        self.handler.handle(req, |res| {
-            if res.status == NotFound || res.status == Forbidden {
-                let result = canonicalize(&quot;/resources/html/not-found.html&quot;);
-                if result.is_err() {
-                    fun(Response::not_found(Headers::empty(), BodyString(&quot;Not found.&quot;)));
-                    return
-                }
-                let canonical = result.unwrap();
-                println!(&quot;opening {}&quot;, canonical.to_str().unwrap());
-                let not_found = fs::read_to_string(canonical.to_str().unwrap()).unwrap();
-                fun(Response::not_found(Headers::empty(), BodyString(not_found.as_str())))
-            } else {
-                fun(res)
-            }
-        })
-    }
 }
     </code></pre>
 </div>

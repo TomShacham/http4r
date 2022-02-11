@@ -21,7 +21,7 @@ impl<'a> StaticFileHandler<'a> {
         }
     }
 
-    fn ok_or_not_found(file: Result<File, Error>, mut vec: &mut Vec<u8>) -> Response {
+    fn ok_or_not_found(path: String, file: Result<File, Error>, mut vec: &mut Vec<u8>) -> Response {
         if file.is_err() {
             Response::not_found(Headers::empty(), BodyString("Could not open file."))
         } else {
@@ -39,7 +39,16 @@ impl<'a> StaticFileHandler<'a> {
                         Response::not_found(Headers::empty(), BodyString("Could not read body into utf-8."))
                     } else {
                         let body = str.unwrap();
-                        Response::ok(Headers::from(vec!(("Content-Type", "text/html"))), BodyString(body))
+                        let content_type = if path.ends_with(".html") {
+                            "text/html"
+                        } else if path.ends_with(".js") {
+                            "text/javascript"
+                        } else if path.ends_with(".css") {
+                            "text/css"
+                        } else {
+                            "text/plain"
+                        };
+                        Response::ok(Headers::from(vec!(("Content-Type", content_type))), BodyString(body))
                     }
                 }
             }
@@ -80,7 +89,7 @@ impl<'a> Handler for StaticFileHandler<'a> {
                 println!("StaticFileHandler trying to open file at {}", canonical_path_str);
                 let file = File::open(canonical_path_str);
                 let mut vec = Vec::new();
-                let res = Self::ok_or_not_found(file, &mut vec);
+                let res = Self::ok_or_not_found(path, file, &mut vec);
                 fun(res);
             }
         }
