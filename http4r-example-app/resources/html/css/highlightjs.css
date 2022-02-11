@@ -1,7 +1,23 @@
-.key-word {
-    color: coral !important;
+.KEYWORD, .END_STATEMENT, .ESCAPE {
+    color: #c75 !important;
 }
 
-.function-name {
+.TYPE_PARAMETER {
+    color: darkcyan;
+}
+
+.CHAR, .OPEN_CHAR, .CLOSE_CHAR, .STRING {
+    color: #171;
+}
+
+.ATTRIBUTE {
     color: #8250df !important;
+}
+
+.METHOD_CALL {
+    color: #cb6;
+}
+
+code div {
+    display: inline;
 }

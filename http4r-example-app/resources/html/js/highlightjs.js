@@ -1,3 +1,62 @@
+document.addEventListener("DOMContentLoaded", function () {
+    colourCode();
+});
+
+function colourCode() {
+    document.querySelectorAll("code").forEach(el => {
+        el.innerHTML = fold(tokenise(el));
+    })
+}
+
+function fold(tokens) {
+    let types = [];
+    let buffer = [];
+    let out = [];
+    let prev = undefined;
+
+    for (let token of tokens) {
+        if (token.type === "TYPE_PARAMETER") {
+            types.push(token.value);
+        }
+        let isActuallyAType = (token.type === "NAME" || token.type === "TYPE") && types.includes(token.value);
+
+        if (isActuallyAType) {
+            writeBuffer(buffer, "GROUPED");
+            out.push(tokenToHtml({value: token.value, colour: "darkcyan", type: "TYPE_PARAMETER"}));
+        } else if (token.type.includes("STRING") && (prev !== undefined && !prev.type.includes("STRING"))) {
+            writeBuffer(buffer, "GROUPED")
+            buffer = [token];
+        } else if (token.type.includes("STRING") && (prev !== undefined && prev.type.includes("STRING"))) {
+            buffer.push(token);
+        } else if (!token.type.includes("STRING") && (prev !== undefined && prev.type.includes("STRING"))) {
+            writeBuffer(buffer, "STRING");
+            buffer.push(token);
+        } else if (token.colour !== "none") {
+            writeBuffer(buffer, "GROUPED")
+            out.push(tokenToHtml(token));
+        } else if (token.colour === "none") {
+            buffer.push(token);
+        }
+        prev = token;
+    }
+
+    writeBuffer(buffer, "GROUPED")
+
+    function writeBuffer(buf, type) {
+        let colour = type === "STRING" ? "#171" : "none";
+        if (buf.length > 0) {
+            out.push(tokenToHtml({value: buf.map(t => t.value).join(""), colour: colour, type: type}));
+        }
+        buffer = [];
+    }
+
+    return out.join("");
+}
+
+function tokenToHtml(token) {
+    return `<div class="${token.type}" style="display: inline; color: ${token.colour};">${escapeHtml(token.value)}</div>`;
+}
+
 const tokens = {
     WHITESPACE: {value: " ", colour: "none", type: "WHITESPACE"},
     NEW_LINE: {value: "\n", colour: "none", type: "NEW_LINE"},
@@ -11,8 +70,8 @@ const tokens = {
     OPEN_SCOPE: {value: "{", colour: "none", type: "OPEN_SCOPE"},
     CLOSE_SCOPE: {value: "}", colour: "none", type: "CLOSE_SCOPE"},
     METHOD_OR_ATTRIBUTE_CALL: {value: ".", colour: "unknown", type: "METHOD_OR_ATTRIBUTE_CALL"},
-    ATTRIBUTE: (word) => ({value: word, colour: "purple", type: "ATTRIBUTE"}),
-    METHOD_CALL: (word) => ({value: word, colour: "yellow", type: "METHOD_CALL"}),
+    ATTRIBUTE: (word) => ({value: word, colour: "#8250df", type: "ATTRIBUTE"}),
+    METHOD_CALL: (word) => ({value: word, colour: "#ca5", type: "METHOD_CALL"}),
     CLASS_METHOD_CALL_OR_TYPE_DECLARATION: {value: ":", colour: "none", type: "CLASS_METHOD_CALL_OR_TYPE_DECLARATION"},
     OPEN_TYPE_EXPLANATION: {value: "::<", colour: "none", type: "OPEN_TYPE_EXPLANATION"},
     CLOSE_TYPE_EXPLANATION: {value: ">", colour: "none", type: "CLOSE_TYPE_EXPLANATION"},
@@ -20,20 +79,20 @@ const tokens = {
     OPEN_TYPE_DECLARATION: {value: ":", colour: "none", type: "OPEN_TYPE_DECLARATION"},
     CLOSE_TYPE_DECLARATION: (char) => ({value: char, colour: "none", type: "CLOSE_TYPE_DECLARATION"}),
     TYPE: (word) => ({value: word, colour: "none", type: "TYPE"}),
-    END_STATEMENT: {value: ";", colour: "orange", type: "END_STATEMENT"},
+    END_STATEMENT: {value: ";", colour: "#c75", type: "END_STATEMENT"},
     REFERENCE: {value: "&", colour: "none", type: "REFERENCE"},
     ARROW: {value: "->", colour: "none", type: "ARROW"},
-    OPEN_STRING: {value: "\"", colour: "green", type: "OPEN_STRING"},
-    CLOSE_STRING: {value: "\"", colour: "green", type: "CLOSE_STRING"},
-    OPEN_CHAR: {value: "'", colour: "green", type: "OPEN_CHAR"},
-    CLOSE_CHAR: {value: "'", colour: "green", type: "CLOSE_CHAR"},
-    ESCAPE: {value: "\\", colour: "orange", type: "ESCAPE"},
-    CHAR: (char) => ({value: char, colour: "green", type: "CHAR"}),
-    TYPE_PARAMETER: (char) => ({value: char, colour: "cyan", type: "TYPE_PARAMETER"}),
-    STRING: (char) => ({value: char, colour: "green", type: "STRING"}),
+    OPEN_STRING: {value: "\"", colour: "#171", type: "OPEN_STRING"},
+    CLOSE_STRING: {value: "\"", colour: "#171", type: "CLOSE_STRING"},
+    OPEN_CHAR: {value: "'", colour: "#171", type: "OPEN_CHAR"},
+    CLOSE_CHAR: {value: "'", colour: "#171", type: "CLOSE_CHAR"},
+    ESCAPE: {value: "\\", colour: "#c75", type: "ESCAPE"},
+    CHAR: (char) => ({value: char, colour: "#171", type: "CHAR"}),
+    TYPE_PARAMETER: (char) => ({value: char, colour: "darkcyan", type: "TYPE_PARAMETER"}),
+    STRING: (char) => ({value: char, colour: "#171", type: "STRING"}),
     VAR_OR_STRUCT_DECLARATION: {value: "none", colour: "none", type: "VAR_OR_STRUCT_DECLARATION"},
     NAME: (word) => ({value: word, colour: "none", type: "NAME"}),
-    KEYWORD: (kw) => ({value: kw, colour: "orange", type: "KEYWORD"}),
+    KEYWORD: (kw) => ({value: kw, colour: "#d75", type: "KEYWORD"}),
 }
 
 function tokenise(el) {
@@ -48,30 +107,36 @@ function tokenise(el) {
         let currentState = state[state.length - 1];
 
         if (char === ")" && lastToken !== undefined && lastToken.value === "(" && (lastLastToken !== undefined && (lastLastToken.value === " " || lastLastToken.value === "\n"))) {
-            prev[prev.length-1] = tokens.OPEN_UNIT;
+            prev[prev.length - 1] = tokens.OPEN_UNIT;
             prev.push(tokens.CLOSE_UNIT);
-        } else if (char === "(" && currentState === tokens.METHOD_OR_ATTRIBUTE_CALL.type || currentState === tokens.CLASS_METHOD_CALL_OR_TYPE_DECLARATION.type) {
-            writeBuffer(buffer, tokens.NAME)
+        } else if (char === "(") {
+            let firstCharOfLastToken = lastToken.value.charAt(0);
+            if (lastToken && (firstCharOfLastToken === firstCharOfLastToken.toUpperCase()) && (firstCharOfLastToken !== ":" && firstCharOfLastToken !== ".")) {
+                writeBuffer(buffer, tokens.ATTRIBUTE)
+            }else {
+                writeBuffer(buffer, tokens.METHOD_CALL)
+            }
             prev.push(tokens.OPEN_FUNCTION_CALL)
             state.pop();
-        } else if (char === "\"" && lastToken !== undefined && lastToken.type !== tokens.STRING.type) {
+        } else if (char === "\"" && lastToken !== undefined && lastToken.type !== "STRING") {
+            writeBuffer(buffer, tokens.NAME);
             prev.push(tokens.OPEN_STRING)
-        } else if (char === "\"" && lastToken !== undefined && lastToken.type !== tokens.ESCAPE.type) {
+        } else if (char === "\"" && lastToken !== undefined && lastToken.value !== tokens.ESCAPE.value) {
             prev.push(tokens.CLOSE_STRING)
-        } else if (lastToken !== undefined && (lastToken.type === tokens.STRING.type || lastToken.type === tokens.OPEN_STRING.type)) {
+        } else if (lastToken !== undefined && (lastToken.type === "STRING" || lastToken.type === tokens.OPEN_STRING.type)) {
             prev.push(tokens.STRING(char))
         } else if (char === "'" && lastToken !== undefined && lastToken.type !== tokens.STRING.type) {
             prev.push(tokens.OPEN_CHAR)
-        } else if (char === "'" && lastToken !== undefined && (lastToken.type !== tokens.STRING.type || lastToken.type !== tokens.CHAR.type) ) {
+        } else if (char === "'" && lastToken !== undefined && (lastToken.type !== tokens.STRING.type || lastToken.type !== tokens.CHAR.type)) {
             prev.push(tokens.CLOSE_CHAR)
         } else if (lastToken !== undefined && lastToken.type === tokens.OPEN_CHAR.type) {
             prev.push(tokens.CHAR(char))
-        } else if (char === "." && currentState !== tokens.METHOD_OR_ATTRIBUTE_CALL.type)  {
+        } else if (char === "." && currentState !== tokens.METHOD_OR_ATTRIBUTE_CALL.type) {
             writeBuffer(buffer, tokens.NAME)
             prev.push(tokens.METHOD_OR_ATTRIBUTE_CALL);
             state.push(tokens.METHOD_OR_ATTRIBUTE_CALL.type);
         } else if (char === ">" && lastToken !== undefined && lastToken.value === "-") {
-            prev[prev.length-1] = tokens.ARROW;
+            prev[prev.length - 1] = tokens.ARROW;
         } else if (char === "<" && lastToken !== undefined && lastToken.type === tokens.CLASS_METHOD_CALL.type) {
             prev[prev.length - 1] = tokens.OPEN_TYPE_EXPLANATION;
             state.push(tokens.OPEN_TYPE_EXPLANATION.type);
@@ -79,6 +144,13 @@ function tokenise(el) {
             prev.push(tokens.CLOSE_TYPE_EXPLANATION);
             state.pop();
         } else if (char === "<") {
+            if (isKeyWord(buffer.join(""))) {
+                writeBuffer(buffer, tokens.KEYWORD)
+            } else if (lastLastToken && lastLastToken.value !== "for") {
+                writeBuffer(buffer, tokens.METHOD_CALL)
+            } else {
+                writeBuffer(buffer, tokens.NAME)
+            }
             prev.push(tokens.OPEN_TYPE_PARAMETERS);
             state.push(tokens.OPEN_TYPE_PARAMETERS.type)
         } else if (char === ">" && currentState === tokens.OPEN_TYPE_PARAMETERS.type) {
@@ -105,6 +177,7 @@ function tokenise(el) {
         } else if (char === " " && lastToken !== undefined && lastToken.type === tokens.OPEN_TYPE_DECLARATION) {
             prev.push(tokens.WHITESPACE)
         } else if (char === ";") {
+            writeBuffer(buffer, tokens.NAME);
             prev.push(tokens.END_STATEMENT)
         } else if (char === "&") {
             prev.push(tokens.REFERENCE)
@@ -143,7 +216,6 @@ function tokenise(el) {
     function writeBuffer(buf, f) {
         let word = buf.join("");
         let items = f(word);
-        console.log(f.name, items);
         prev.push(items);
         buffer = [];
     }
