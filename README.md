@@ -47,7 +47,6 @@ Open the project in CLion and Salisbury's your Uncle.
 ## Todos
 
 - example app
-  - write html file handler with appropriate content-type headers and serve 
   - local webpage that loads in wasm app and runs tests
     - JSON body parser
     - read and write to database
