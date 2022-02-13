@@ -6,9 +6,7 @@
     <title>http4r Example App</title>
     <script src="js/tailwind-3.0.18.js"></script>
     <script src="js/highlightjs.js"></script>
-    <link rel="stylesheet" href="css/some-css-file.css" type="text/css"/>
-    <link type="text/css" rel="stylesheet" href="http://fakedomain.com/smilemachine/html.css" />
-
+    <link rel="stylesheet" href="css/styling.css" type="text/css"/>
 </head>
 <body>
 <div class="flex full-width justify-between bg-colour p-4 sm:p-8 font text-xs sm:text-base">
@@ -20,18 +18,18 @@
         <div class="ml-4">Recipes</div>
     </div>
 </div>
-<div class="flex p-4 sm:p-20 items-center flex-col">
-    <div class="doc-font block mb-10">
+<div class="flex p-4 sm:p-10 items-center flex-col">
+    <div class="doc-font block mb-10 w-2/3">
         <a href="/">http4r</a> is a web toolkit based on <a href="https://www.http4k.org">http4k</a> and <a
             href="https://github.com/http4t/http4t">http4t</a>,
         which in turn draws on work by <a href="https://www.github.com/bodar">Dan</a> and his <a
             href="https://www.github.com/bodar/utterlyidle">UtterlyIdle</a>
         web framework.
     </div>
-    <div class="doc-font block mb-10">
+    <div class="doc-font block w-2/3">
         <div class="mb-4">The main benefits of http4r over other web frameworks:</div>
         <ul>
-            <li class="mb-4"><b class="text-base">1</b> Simple http handler interface means you can unit test your App
+            <li class="mb-4"><b class="text-base">1</b> Simple "server as a function" means you can unit test your App
             </li>
             <li class="mb-4"><b class="text-base">2</b> Easily extend core functionality by composing handlers</li>
             <li class="mb-4"><b class="text-base">3</b> Symmetric client and server ie both are http handlers</li>
@@ -44,22 +42,57 @@
             <li class="mb-4"><b class="text-base">6</b> Even better, we can compile our App to WASM and run unit tests
                 in the browser.
             </li>
+            <li class="mb-4"><b class="text-base">7</b> It is blazingly fast and uses minimal dependencies.</li>
+            <li class="mb-4"><b class="text-base">8</b> It is synchronous for the sake of simplicity - if you think you
+                need async, you don't.
+            </li>
         </ul>
     </div>
-    <div class="doc-font block mb-10">
-        <div class="mb-4">It is blazingly fast and uses minimal dependencies.</div>
-        <div class="mb-4">
-            It is synchronous for the sake of simplicity - if you think you need async, you don't.
-        </div>
-        <div class="mb-4">
-            And if you still need it, you don't. But if you really, really have to, use <a href="https://tokio.rs/">tokio</a>
-            :)
-        </div>
+</div>
+<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center hidden lg:flex">
+    <div class="block w-2/3">
+        <div class="mb-4">At the heart of the library is the Handler trait.</div>
+        <div class="mb-4">It takes a Request and a function taking a Response:</div>
     </div>
-    <pre class="hidden lg:block"><code class="hljs language-rust text-xs">trait Handler {
+</div>
+<div class="flex justify-center p-4 hidden lg:flex">
+    <pre class="text-xs w-1/2"><code>
+trait Handler {
     fn handle&lt;F&gt;(&amp;mut self, req: Request, fun: F) -&gt; ()
     where F: FnOnce(Response) -&gt; () + Sized;
 }
+    </code></pre>
+</div>
+<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center hidden lg:flex">
+    <div class="block w-2/3">
+        <div class="mb-4">This allows us to compose Handlers so that extending the core functionality of http4r is
+            easy.
+        </div>
+        <div class="mb-4">Ultimately our server is just a function taking a Request and returning a Response.</div>
+        <div class="mb-4">So now the concept of "middleware" is gone, it's just Handlers all the way down.</div>
+        <div class="mb-4">For example, if we wanted to show a custom 404 page for any NotFound response we would simply:</div>
+        <div class="mb-4">implement the handler trait, catch any 404s and return a custom Response (see below)</div>
+    </div>
+</div>
+<div class="flex justify-center p-4 hidden lg:flex">
+    <pre class="w-1/2 text-xs"><code>
+fn main() {
+    //our NotFoundHandler takes in the next handler to delegate to, in this case, a StaticFileHandler
+    NotFoundHandler::new(StaticFileHandler::new("./resources/html"))
+}
+
+impl&lt;H&gt; Handler for NotFoundHandler&lt;H&gt; where H: Handler {
+    fn handle&lt;F&gt;(&amp;mut self, req: Request, fun: F) -&gt; () where F: FnOnce(Response) -&gt; () + Sized {
+        self.handler.handle(req, |res| {
+            if res.status == NotFound {
+                fun(Response::not_found(Headers::empty(), BodyString(&quot;Our custom 404 page!&quot;)))
+            } else {
+                fun(res)
+            }
+        })
+    }
+}
+
     </code></pre>
 </div>
 </body>

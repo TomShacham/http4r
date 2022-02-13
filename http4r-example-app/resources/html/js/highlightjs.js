@@ -4,7 +4,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function colourCode() {
     document.querySelectorAll("code").forEach(el => {
-        el.innerHTML = fold(tokenise(el));
+        let tokens1 = tokenise(el);
+        console.log(tokens1);
+        el.innerHTML = fold(tokens1);
     })
 }
 
@@ -59,6 +61,7 @@ function tokenToHtml(token) {
 
 const tokens = {
     WHITESPACE: {value: " ", colour: "none", type: "WHITESPACE"},
+    COMMENT: {value: "//", colour: "#777", type: "COMMENT"},
     NEW_LINE: {value: "\n", colour: "none", type: "NEW_LINE"},
     COMMA: {value: ",", colour: "none", type: "COMMA"},
     OPEN_TYPE_PARAMETERS: {value: "<", colour: "none", type: "OPEN_TYPE_PARAMETERS"},
@@ -90,6 +93,7 @@ const tokens = {
     CHAR: (char) => ({value: char, colour: "#171", type: "CHAR"}),
     TYPE_PARAMETER: (char) => ({value: char, colour: "darkcyan", type: "TYPE_PARAMETER"}),
     STRING: (char) => ({value: char, colour: "#171", type: "STRING"}),
+    COMMENT_STRING: (str) => ({value: str, colour: "#777", type: "COMMENT"}),
     VAR_OR_STRUCT_DECLARATION: {value: "none", colour: "none", type: "VAR_OR_STRUCT_DECLARATION"},
     NAME: (word) => ({value: word, colour: "none", type: "NAME"}),
     KEYWORD: (kw) => ({value: kw, colour: "#d75", type: "KEYWORD"}),
@@ -106,7 +110,18 @@ function tokenise(el) {
         let lastLastToken = prev[prev.length - 2];
         let currentState = state[state.length - 1];
 
-        if (char === ")" && lastToken !== undefined && lastToken.value === "(" && (lastLastToken !== undefined && (lastLastToken.value === " " || lastLastToken.value === "\n"))) {
+        if (char === "/" && lastToken && (lastToken.value === " " || lastToken.value === "\n")) {
+            prev.push(tokens.COMMENT);
+            state.push(tokens.COMMENT.type);
+        } else if (char === "/" && lastToken && lastToken.type === "COMMENT") {
+            continue
+        } else if (char === "\n" && currentState === tokens.COMMENT.type) {
+            writeBuffer(buffer, tokens.COMMENT_STRING)
+            state.pop();
+            prev.push(tokens.NEW_LINE);
+        } else if (currentState === tokens.COMMENT.type) {
+            buffer.push(char);
+        } else if (char === ")" && lastToken !== undefined && lastToken.value === "(" && (lastLastToken !== undefined && (lastLastToken.value === " " || lastLastToken.value === "\n"))) {
             prev[prev.length - 1] = tokens.OPEN_UNIT;
             prev.push(tokens.CLOSE_UNIT);
         } else if (char === "(") {

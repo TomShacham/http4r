@@ -49,6 +49,10 @@ a {
     color: #171;
 }
 
+.COMMENT {
+    color: #777;
+}
+
 .ATTRIBUTE {
     color: #8250df;
 }
