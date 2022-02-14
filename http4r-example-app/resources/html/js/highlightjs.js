@@ -4,9 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function colourCode() {
     document.querySelectorAll("code").forEach(el => {
-        let tokens1 = tokenise(el);
-        console.log(tokens1);
-        el.innerHTML = fold(tokens1);
+        el.innerHTML = fold(tokenise(el));
     })
 }
 

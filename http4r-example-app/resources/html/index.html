@@ -92,7 +92,49 @@ impl&lt;H&gt; Handler for NotFoundHandler&lt;H&gt; where H: Handler {
         })
     }
 }
+    </code></pre>
+</div>
+<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center hidden lg:flex">
+    <div class="block w-2/3">
+        <div class="mb-4">We can easily test the above because it's just a function.</div>
+        <div class="mb-4">We can write an "in-memory" test like this:</div>
+    </div>
+</div>
+<div class="flex justify-center p-4 hidden lg:flex">
+    <pre class="w-1/2 text-xs"><code>
+#[test]
+fn not_found() {
+    let mut not_found_handler = NotFoundHandler::new(
+        StaticFileHandler::new("./resources/html", "test".to_string())
+    );
+    let unknown_route = Request::get(Uri::parse("/unknown/route"), Headers::empty());
 
+    not_found_handler.handle(unknown_route, |res| {
+        assert_eq!(res.status, NotFound);
+        assert_eq!(body_string(res.body), "Our custom 404 page!")
+    });
+}
+    </code></pre>
+</div>
+<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center hidden lg:flex">
+    <div class="block w-2/3">
+        <div class="mb-4">Or we can test it "over-the-wire" by starting a server:</div>
+    </div>
+</div>
+<div class="flex justify-center p-4 hidden lg:flex">
+    <pre class="w-1/2 text-xs"><code>
+#[test]
+fn not_found() {
+    // start server on port 0 (finds next available port)
+    let mut server = Server::new(0);
+    // hide the construction of our handlers behind convenience method App::in_memory
+    server.test(|| { Ok(App::in_memory(Environment::empty())) });
+
+    let mut client = Client::new("127.0.0.1", server.port, None);
+    client.handle(Request::get(Uri::parse("/unknown/route"), Headers::empty()), |res| {
+        assert_eq!(body_string(res.body), "Our custom 404 page!");
+    })
+}
     </code></pre>
 </div>
 </body>

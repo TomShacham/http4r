@@ -8,15 +8,17 @@ mod tests {
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
     use http4r_example_app::app::App;
+    use http4r_example_app::not_found_handler::NotFoundHandler;
+    use http4r_example_app::static_file_handler::StaticFileHandler;
 
     #[test]
     fn not_found() {
-        let mut app = App::new();
-        let get_root = Request::get(Uri::parse("/"), Headers::empty());
+        let mut not_found_handler = NotFoundHandler::new(StaticFileHandler::new("./resources/html", "test".to_string()));
+        let unknown_route = Request::get(Uri::parse("/unknown/route"), Headers::empty());
 
-        app.handle(get_root, |res| {
+        not_found_handler.handle(unknown_route, |res| {
             assert_eq!(res.status, NotFound);
-            assert_eq!(body_string(res.body), "Not found.")
+            assert_eq!(body_string(res.body), "Our custom 404 page!")
         });
     }
 }
