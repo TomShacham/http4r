@@ -65,7 +65,7 @@ If you are using this software for profit, please consider sponsorship :-)".trim
     }
 
     fn listen(&mut self) -> TcpListener {
-        let addr = format!("127.0.0.1:{}", self.port);
+        let addr = format!("0.0.0.0:{}", self.port);
         let listener = TcpListener::bind(addr).unwrap();
         self.port = listener.local_addr().unwrap().port();
         listener
