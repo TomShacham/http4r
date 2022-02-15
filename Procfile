@@ -1,1 +1,1 @@
-web: ls -al
+web: ls -al ./target
