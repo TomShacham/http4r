@@ -1,1 +1,1 @@
-web: ls -al ./target
+web: ./target/release/http4r-example-app

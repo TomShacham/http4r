@@ -1,0 +1,1 @@
+{"rustc":10924125427013387279,"features":"","target":0,"profile":0,"path":0,"deps":[[16445155094874038561,"build_script_build",false,2302860662699394114]],"local":[{"RerunIfChanged":{"output":"release/build/crc32fast-9645e47cdce3982c/output","paths":["build.rs"]}}],"rustflags":[],"metadata":0,"config":0,"compile_kind":0}
