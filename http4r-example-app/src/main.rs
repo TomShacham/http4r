@@ -6,7 +6,9 @@ use http4r_example_app::environment::Environment;
 fn main() {
     let env = Environment::from(env::vars())
         .with(vec!(("ENV", "local")));
-    let port = env.get("PORT").map(|p| p.parse().unwrap_or(0));
+    println!("PORT: {}", env.get("PORT").unwrap());
+
+    let port = env.get("PORT").map(|p| p.parse::<u16>().unwrap_or(0));
     let mut server = Server::new(port.unwrap_or(0));
 
     server.start(move || {
