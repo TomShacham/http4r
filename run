@@ -9,8 +9,11 @@ pushd http4r-core
 crate doc --target-dir doc
 popd
 
+
 echo "******** building WASM *********"
 pushd http4r-browser
 wasm-pack --verbose build --target web
 popd
 
+#echo "********* docs website **********"
+#heroku buildpacks:set emk/rust
