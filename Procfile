@@ -1,1 +1,1 @@
-web: HTTP_PORT=$PORT ./target/release/http4r-example-app
+web: ./target/release/http4r-example-app
