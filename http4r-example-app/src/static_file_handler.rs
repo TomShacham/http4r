@@ -3,7 +3,7 @@ use std::fs::{canonicalize, File};
 use std::io::{Error, Read};
 use std::str::from_utf8;
 use http4r_core::handler::Handler;
-use http4r_core::headers::Headers;
+use http4r_core::headers::{cache_control_header, content_type_header, Headers};
 use http4r_core::http_message::{Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::uri::Uri;
@@ -39,16 +39,20 @@ impl<'a> StaticFileHandler<'a> {
                         Response::not_found(Headers::empty(), BodyString("Could not read body into utf-8."))
                     } else {
                         let body = str.unwrap();
-                        let content_type = if path.ends_with(".html") {
-                            "text/html"
+                        let (content_type, cache_control) = if path.ends_with(".html") {
+                            ("text/html", "private, max-age=10")
                         } else if path.ends_with(".js") {
-                            "text/javascript"
+                            ("text/javascript", "private, max-age=30")
                         } else if path.ends_with(".css") {
-                            "text/css"
+                            ("text/css", "private, max-age=60")
                         } else {
-                            "text/plain"
+                            ("text/plain", "no-store")
                         };
-                        Response::ok(Headers::from(vec!(("Content-Type", content_type))), BodyString(body))
+                        let headers = Headers::from(vec!(
+                            content_type_header(content_type),
+                            cache_control_header(cache_control)
+                        ));
+                        Response::ok(headers, BodyString(body))
                     }
                 }
             }
