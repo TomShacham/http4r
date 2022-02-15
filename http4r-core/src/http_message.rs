@@ -341,6 +341,7 @@ fn chunked_body_and_trailers<'a>(
     Ok((body, trailers, chunked_body_bytes_read))
 }
 
+#[allow(unused_assignments)]
 fn read_body_and_trailers(reader: &mut [u8], mut stream: &mut TcpStream, up_to_in_reader: usize, read_bytes_from_stream: usize, chunks_writer: &mut Vec<u8>, trailers_writer: &mut Vec<u8>) -> Result<usize, MessageError> {
     let metadata = Some(ReadMetadata::chunked(ReadMode::Metadata, 0, 0));
     let (mut read_bytes_from_stream, mut up_to_in_reader, mut result) =
@@ -751,6 +752,7 @@ fn decompress<'a>(compression: &'a CompressionAlgorithm, writer: &'a mut Vec<u8>
     }
 }
 
+#[allow(unused_assignments)]
 pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chunk: &[u8], trailers: Headers, compression: CompressionAlgorithm) {
     let mut writer = Vec::new();
     let mut request = Vec::new();
@@ -786,6 +788,7 @@ pub fn write_chunked_stream<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn
     }
 }
 
+#[allow(unused_assignments)]
 fn write_simple_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read + 'a>, first_line_and_headers: String, trailers: Headers) {
     let buffer = &mut [0 as u8; 16384];
     let mut bytes_read = reader.read(buffer).unwrap_or(0);

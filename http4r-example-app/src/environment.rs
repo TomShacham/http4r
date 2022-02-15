@@ -1,5 +1,4 @@
 use std::env::Vars;
-use std::f32::consts::E;
 
 pub struct Environment {
     pairs: Vec<(String, String)>

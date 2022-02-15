@@ -6,8 +6,6 @@ use http4r_core::handler::Handler;
 use http4r_core::headers::{cache_control_header, content_type_header, Headers};
 use http4r_core::http_message::{Request, Response};
 use http4r_core::http_message::Body::BodyString;
-use http4r_core::uri::Uri;
-use crate::environment::Environment;
 
 pub struct StaticFileHandler<'a> {
     root: &'a str,
@@ -33,7 +31,7 @@ impl<'a> StaticFileHandler<'a> {
                 if !metadata.unwrap().is_file() {
                     Response::not_found(Headers::empty(), BodyString("Not a file but a directory or symlink."))
                 } else {
-                    let read = file.read_to_end(&mut vec);
+                    file.read_to_end(&mut vec).unwrap();
                     let str = from_utf8(vec.as_slice());
                     if str.is_err() {
                         Response::not_found(Headers::empty(), BodyString("Could not read body into utf-8."))

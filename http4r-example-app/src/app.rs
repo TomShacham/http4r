@@ -1,14 +1,6 @@
-use std::fs;
-use std::fs::File;
-use std::io::ErrorKind::NotFound;
-use std::io::Read;
-use std::str::from_utf8;
 use http4r_core::handler::Handler;
-use http4r_core::headers::Headers;
 use http4r_core::http_message::{Request, Response};
-use http4r_core::http_message::Body::BodyString;
 use http4r_core::logging_handler::{LoggingHttpHandler, RustLogger, WasmClock};
-use http4r_core::uri::Uri;
 use crate::environment::Environment;
 use crate::not_found_handler::NotFoundHandler;
 use crate::static_file_handler::StaticFileHandler;
