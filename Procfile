@@ -1,1 +1,1 @@
-web: ./target/debug/http4r-example-app
+web: ls -al
