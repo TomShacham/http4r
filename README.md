@@ -50,8 +50,9 @@ Open the project in CLion and Salisbury's your Uncle.
   - local webpage that loads in wasm app and runs tests
     - JSON body parser
     - read and write to database
-    - handle cookies
     - reach out to some 3rd party api
+    - do some basic auth or cookie thing
+      - checkout edge workers
 ---
 - core api
   - support multipart form data and application url form encoded 
@@ -59,8 +60,6 @@ Open the project in CLion and Salisbury's your Uncle.
   - publish crate
   - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - default response headers, content-type, content-length, date
-  - example app with WASM example
-  - write docs
   - client to use Host header eg Dan's
   - 
   - checkout browsix

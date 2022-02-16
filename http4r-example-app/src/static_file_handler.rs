@@ -75,7 +75,10 @@ impl<'a> Handler for StaticFileHandler<'a> {
                 let current_dir_plus_root = if self.env_name != "test" {
                     result.unwrap().to_str().unwrap().to_string() + "/http4r-example-app" + self.root
                 } else { result.unwrap().to_str().unwrap().to_string() + self.root };
-                let full_path = current_dir_plus_root.clone() + path.as_str();
+                let mut full_path = current_dir_plus_root.clone() + path.as_str();
+                if !Self::is_sub_resource(&full_path) {
+                    full_path = full_path + ".html";
+                };
                 let result = canonicalize(full_path.clone());
                 if result.is_err() {
                     fun(Response::not_found(Headers::empty(), BodyString("File does not exist.")));
@@ -91,9 +94,15 @@ impl<'a> Handler for StaticFileHandler<'a> {
                 println!("StaticFileHandler trying to open file at {}", canonical_path_str);
                 let file = File::open(canonical_path_str);
                 let mut vec = Vec::new();
-                let res = Self::ok_or_not_found(path, file, &mut vec);
+                let res = Self::ok_or_not_found(full_path, file, &mut vec);
                 fun(res);
             }
         }
+    }
+}
+
+impl<'a> StaticFileHandler<'a> {
+    fn is_sub_resource(full_path: &String) -> bool {
+        full_path.ends_with(".js") || full_path.ends_with(".css") || full_path.ends_with(".png") || full_path.ends_with(".jpg") || full_path.ends_with(".jpeg")
     }
 }
