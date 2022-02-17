@@ -5,7 +5,7 @@ use std::str::from_utf8;
 use http4r_core::handler::Handler;
 use http4r_core::headers::{cache_control_header, content_type_header, Headers};
 use http4r_core::http_message::{Request, Response};
-use http4r_core::http_message::Body::BodyString;
+use http4r_core::http_message::Body::{BodyStream, BodyString};
 
 pub struct StaticFileHandler<'a> {
     root: &'a str,
@@ -19,41 +19,64 @@ impl<'a> StaticFileHandler<'a> {
         }
     }
 
-    fn ok_or_not_found(path: String, file: Result<File, Error>, mut vec: &mut Vec<u8>) -> Response {
+    fn ok_or_not_found(path: String, file: Result<File, Error>, mut vec: &mut Vec<u8>, is_img: bool) -> Response {
         if file.is_err() {
-            Response::not_found(Headers::empty(), BodyString("Could not open file."))
+            println!("Could not open file.");
+            return Response::not_found(Headers::empty(), BodyString("Could not open file."));
+        }
+        let mut file = file.unwrap();
+        let metadata = file.metadata();
+        if metadata.is_err() {
+            println!("Could not get metadata for file.");
+            return Response::not_found(Headers::empty(), BodyString("Could not get metadata for file."))
+        }
+        if !metadata.unwrap().is_file() {
+            println!("Not a file but a directory or symlink.");
+            return Response::not_found(Headers::empty(), BodyString("Not a file but a directory or symlink."))
+        }
+        let read = file.read_to_end(&mut vec);
+        if read.is_err() {
+            println!("Failed to read file.");
+            return Response::not_found(Headers::empty(), BodyString("Failed to read file."))
+        }
+        let (content_type, cache_control) = if path.ends_with(".html") {
+            ("text/html", "private, max-age=10")
+        } else if path.ends_with(".js") {
+            ("text/javascript", "private, max-age=30")
+        } else if path.ends_with(".css") {
+            ("text/css", "private, max-age=60")
+        } else if path.ends_with(".png") {
+            ("image/png", "private, max-age=60")
+        } else if path.ends_with(".jpg") {
+            ("image/jpg", "private, max-age=60")
+        } else if path.ends_with(".jpeg") {
+            ("image/jpeg", "private, max-age=60")
+        } else if path.ends_with(".bmp") {
+            ("image/bmp", "private, max-age=60")
+        } else if path.ends_with(".gif") {
+            ("image/gif", "private, max-age=60")
+        } else if path.ends_with(".webp") {
+            ("image/webp", "private, max-age=60")
+        } else if path.ends_with(".ico") {
+            ("image/x-icon", "private, max-age=60")
         } else {
-            let mut file = file.unwrap();
-            let metadata = file.metadata();
-            if metadata.is_err() {
-                Response::not_found(Headers::empty(), BodyString("Could not get metadata for file."))
-            } else {
-                if !metadata.unwrap().is_file() {
-                    Response::not_found(Headers::empty(), BodyString("Not a file but a directory or symlink."))
-                } else {
-                    file.read_to_end(&mut vec).unwrap();
-                    let str = from_utf8(vec.as_slice());
-                    if str.is_err() {
-                        Response::not_found(Headers::empty(), BodyString("Could not read body into utf-8."))
-                    } else {
-                        let body = str.unwrap();
-                        let (content_type, cache_control) = if path.ends_with(".html") {
-                            ("text/html", "private, max-age=10")
-                        } else if path.ends_with(".js") {
-                            ("text/javascript", "private, max-age=30")
-                        } else if path.ends_with(".css") {
-                            ("text/css", "private, max-age=60")
-                        } else {
-                            ("text/plain", "no-store")
-                        };
-                        let headers = Headers::from(vec!(
-                            content_type_header(content_type),
-                            cache_control_header(cache_control)
-                        ));
-                        Response::ok(headers, BodyString(body))
-                    }
-                }
+            ("text/plain", "no-store")
+        };
+        let headers = Headers::from(vec!(
+            content_type_header(content_type),
+            cache_control_header(cache_control)
+        ));
+
+        if is_img {
+            Response::ok(headers, BodyStream(Box::new(vec.as_slice())))
+        } else {
+            let str = from_utf8(vec.as_slice());
+            if str.is_err() {
+                println!("Could not read body into utf-8.");
+                return Response::not_found(Headers::empty(), BodyString("Could not read body into utf-8."))
             }
+            let body = str.unwrap();
+            Response::ok(headers, BodyString(body))
         }
     }
 }
@@ -63,7 +86,7 @@ impl<'a> Handler for StaticFileHandler<'a> {
         match req {
             Request { .. } => {
                 let path = if req.uri.path == "/" {
-                    "/index.html".to_string()
+                    "/index".to_string()
                 } else {
                     req.uri.path.to_string()
                 };
@@ -94,7 +117,7 @@ impl<'a> Handler for StaticFileHandler<'a> {
                 println!("StaticFileHandler trying to open file at {}", canonical_path_str);
                 let file = File::open(canonical_path_str);
                 let mut vec = Vec::new();
-                let res = Self::ok_or_not_found(full_path, file, &mut vec);
+                let res = Self::ok_or_not_found(full_path.clone(), file, &mut vec, Self::is_img(&full_path));
                 fun(res);
             }
         }
@@ -102,7 +125,22 @@ impl<'a> Handler for StaticFileHandler<'a> {
 }
 
 impl<'a> StaticFileHandler<'a> {
+    fn is_img(full_path: &String) -> bool {
+        full_path.ends_with(".png")
+            || full_path.ends_with(".jpg")
+            || full_path.ends_with(".jpeg")
+            || full_path.ends_with(".ico")
+            || full_path.ends_with(".bmp")
+            || full_path.ends_with(".gif")
+            || full_path.ends_with(".webp")
+    }
+}
+
+impl<'a> StaticFileHandler<'a> {
     fn is_sub_resource(full_path: &String) -> bool {
-        full_path.ends_with(".js") || full_path.ends_with(".css") || full_path.ends_with(".png") || full_path.ends_with(".jpg") || full_path.ends_with(".jpeg")
+        full_path.ends_with(".js")
+            || full_path.ends_with(".css")
+            || full_path.ends_with(".txt")
+            || Self::is_img(full_path)
     }
 }
