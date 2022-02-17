@@ -211,7 +211,7 @@ fn read(
     let mut finished = false;
     let mut result = ReadResult::Err(MessageError::HeadersTooBig("".to_string()));
     while !finished {
-        if up_to_in_reader > 0 {
+        if up_to_in_reader > 0 && read_bytes_from_stream > up_to_in_reader {
             result = fun(&mut reader[up_to_in_reader..read_bytes_from_stream], writer, metadata);
             if result.is_err() {
                 return (0, 0, ReadResult::Err(result.err()));
@@ -391,7 +391,12 @@ fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up
             chunk_size = (chunk_size * 10) + option.unwrap() as usize;
             if chunk_size == 0 { // we have encountered the 0 chunk
                 finished = true;
-                up_to_in_reader = index + 3; // add 3 to go past the 0\r\n at the end
+                // if more bytes left then assume there are trailers (which means end is 0\r\n otherwise its 0\r\n\r\n)
+                if reader.len() > index + 5 {
+                    up_to_in_reader = index + 3
+                } else {
+                    up_to_in_reader = index + 5; // add 5 to go past the 0\r\n\r\n at the end
+                }
                 break;
             }
         } else if mode == ReadMode::Metadata && on_boundary {
@@ -759,13 +764,16 @@ pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chun
     if compression.is_some() {
         compress(&compression, &mut writer, chunk);
         write_chunk_metadata(&mut first_line, writer.len().to_string());
-        request = [first_line.as_bytes(), writer.as_slice(), "\r\n0\r\n".as_bytes()].concat();
+        request = [first_line.as_bytes(), writer.as_slice(), "\r\n".as_bytes()].concat();
     } else {
         write_chunk_metadata(&mut first_line, chunk.len().to_string());
-        request = [first_line.as_bytes(), chunk, "\r\n0\r\n".as_bytes()].concat();
+        request = [first_line.as_bytes(), chunk, "\r\n".as_bytes()].concat();
     }
+    let mut end = "";
     if !trailers.is_empty() {
-        request.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
+        request.extend_from_slice(format!("0\r\n{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
+    } else {
+        request.extend_from_slice("0\r\n\r\n".as_bytes());
     }
     stream.write(request.as_slice()).unwrap();
 }
@@ -819,6 +827,8 @@ fn write_simple_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read
     let mut end = vec!(b'0', b'\r', b'\n');
     if !trailers.is_empty() {
         end.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
+    } else {
+        end.push(b'\r'); end.push(b'\n');
     }
     stream.write(end.as_slice()).unwrap();
 }
@@ -849,6 +859,8 @@ fn write_compressed_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn 
     let mut end = vec!(b'0', b'\r', b'\n');
     if !trailers.is_empty() {
         end.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
+    } else {
+        end.push(b'\r'); end.push(b'\n');
     }
     let message = [first_line_and_headers.as_bytes(), writer.as_slice(), end.as_slice()].concat();
     let _copy = copy(&mut message.as_slice(), &mut stream).unwrap();
