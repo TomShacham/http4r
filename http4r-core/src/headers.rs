@@ -224,6 +224,6 @@ pub fn content_type_header(value: &str) -> (&'static str, &str) {
     ("Content-Type", value)
 }
 
-pub fn cache_control_header(value: &str) -> (&'static str, &str) {
-    ("Cache-Control", value)
-}
+pub fn cache_control_header(value: &str) -> (&'static str, &str) { ("Cache-Control", value) }
+
+pub fn content_length_header(value: &str) -> (&'static str, &str) { ("Content-Length", value) }
