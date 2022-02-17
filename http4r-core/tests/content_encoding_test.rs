@@ -10,7 +10,7 @@ mod tests {
     use http4r_core::http_message::Status::OK;
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
-    use crate::common::{EchoBodyHandler, PassHeadersAsBody, PassThroughHandler};
+    use crate::common::{EchoBodyHandler, PassHeadersAsBody, PassThroughHandler, SetContentEncodingToNoneAndEchoHeaders};
 
     #[test]
     fn encode_body_using_accept_encoding_prefers_brotli() {
@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn transfer_encoding_wins_over_accept_encoding_as_client_may_send_in_one_format_and_accept_in_another() {
+    fn accept_encoding_wins_over_transfer_encoding_as_client_may_send_in_one_format_and_accept_in_another() {
         let mut server = Server::new(0);
         server.test(|| { Ok(PassHeadersAsBody {}) });
 
@@ -113,8 +113,36 @@ mod tests {
             assert_eq!(expected_body.to_wire_string(), body_string(res.body));
             assert_eq!(res.status, OK);
             assert_eq!(res.headers.vec, vec!(
-                ("Transfer-Encoding".to_string(), "gzip, chunked".to_string()),
-                ("Accept-Encoding".to_string(), "gzip, deflate".to_string()),
+                ("Content-Length".to_string(), "90".to_string()),
+                ("Content-Encoding".to_string(), "br".to_string()),
+            ));
+        })
+    }
+
+    #[test]
+    fn setting_response_header_of_content_encoding_none_wins_over_everything() {
+        let mut server = Server::new(0);
+        server.test(|| { Ok(SetContentEncodingToNoneAndEchoHeaders {}) });
+
+        let mut client = Client::new("127.0.0.1", server.port, None);
+        let headers = Headers::from(vec!(
+            ("Transfer-Encoding", "gzip, chunked"),
+            ("Accept-Encoding", "br, gzip, deflate"),
+            ("Content-Encoding", "br"),
+        ));
+        let expected_body = Headers::from_headers(&headers);
+
+        let str = "Some body";
+        let request = Request::post(
+            Uri::parse("/"),
+            headers,
+            BodyStream(Box::new(str.as_bytes())));
+
+        client.handle(request, move|res| {
+            assert_eq!(res.status, OK);
+            assert_eq!(res.headers.vec, vec!(
+               // no content encoding
+               ("Content-Length".to_string(), "0".to_string())
             ));
         })
     }

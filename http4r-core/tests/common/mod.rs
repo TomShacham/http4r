@@ -37,6 +37,16 @@ impl Handler for EchoBodyHandler {
 }
 
 
+pub struct SetContentEncodingToNoneAndEchoHeaders {}
+
+impl Handler for SetContentEncodingToNoneAndEchoHeaders {
+    fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        let response = Response::ok(Headers::from(vec!(("Content-Encoding", "none"))), Body::empty());
+        fun(response);
+    }
+}
+
+
 
 pub struct PassHeadersAsBody {}
 
@@ -63,7 +73,7 @@ impl Handler for MalformedChunkedEncodingClient {
         let uri = format!("127.0.0.1:{}", self.port);
         let mut stream = TcpStream::connect(uri).unwrap();
 
-        stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes()).unwrap();
+        stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n".as_bytes()).unwrap();
 
         let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_writer = Vec::with_capacity(1048576);

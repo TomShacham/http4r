@@ -438,8 +438,6 @@ When a chunked message containing a non-empty trailer is received,
         server.test(|| { Ok(PassThroughHandler {}) });
         let mut stream = TcpStream::connect(format!("127.0.0.1:{}", server.port)).unwrap();
 
-        let _write = stream.write("GET / HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\nX".as_bytes());
-
         let mut client = MalformedChunkedEncodingClient { port: server.port };
 
         client.handle(Request::get(Uri::parse("/"), Headers::from(vec!(("Transfer-encoding" , "chunked")))), |res| {

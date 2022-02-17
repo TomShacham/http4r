@@ -24,7 +24,7 @@ mod tests {
         // no Connection header
         let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked")));
         client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
-            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: TE")
+            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked")
         });
 
         // already set connection header but without TE

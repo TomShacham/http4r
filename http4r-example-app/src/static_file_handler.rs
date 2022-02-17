@@ -67,9 +67,8 @@ impl<'a> StaticFileHandler<'a> {
             cache_control_header(cache_control),
             // content_length_header(vec.len().to_string().as_str())
         ));
-
         if is_img {
-            Response::ok(headers, BodyStream(Box::new(vec.as_slice())))
+            Response::ok(headers.add(("Content-Encoding", "none")), BodyStream(Box::new(vec.as_slice())))
         } else {
             let str = from_utf8(vec.as_slice());
             if str.is_err() {
