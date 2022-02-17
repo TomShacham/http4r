@@ -65,7 +65,7 @@ impl<'a> StaticFileHandler<'a> {
         let headers = Headers::from(vec!(
             content_type_header(content_type),
             cache_control_header(cache_control),
-            content_length_header(vec.len().to_string().as_str())
+            // content_length_header(vec.len().to_string().as_str())
         ));
 
         if is_img {

@@ -104,12 +104,7 @@ pub fn read_message_from_wire<'a>(
     let is_version_1_0 = part3 == "HTTP/1.0";
 
     let request_options = RequestOptions::from(&headers);
-    let compression = if is_response {
-        request_options.response_compression()
-    } else if is_request {
-        request_options.content_encoding
-    } else { NONE };
-
+    let compression = request_options.read_compression();
     let content_length = headers.content_length_header();
 
     let result = if let Some(_encoding) = transfer_encoding {
@@ -370,6 +365,7 @@ fn read_body_and_trailers(reader: &mut [u8], mut stream: &mut TcpStream, up_to_i
 fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up_to: usize, this_chunk_size: usize) -> ReadResult {
     let mut prev = vec!('1', '2', '3', '4', '5');
     let mut chunk_size: usize = this_chunk_size;
+    let mut chunk_size_hex: String = "".to_string();
     let mut bytes_of_this_chunk_read_previously = read_up_to;
     let mut finished = false;
     let mut bytes_of_chunk_read_this_pass: usize = 0;
@@ -381,27 +377,27 @@ fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up
 
         let on_boundary = *octet == b'\n' || *octet == b'\r';
         if mode == ReadMode::Metadata && !on_boundary {
-            // if we have a digit, multiply last digit by 10 and add this one
-            // if first digit we encounter is 0 then we'll multiply 0 by 10 and get 0
-            // ... and know that we are at the end
-            let option = (*octet as char).to_digit(10);
-            if option.is_none() {
-                return ReadResult::Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", *octet as char)));
-            }
-            chunk_size = (chunk_size * 10) + option.unwrap() as usize;
-            if chunk_size == 0 { // we have encountered the 0 chunk
-                finished = true;
-                // if more bytes left then assume there are trailers (which means end is 0\r\n otherwise its 0\r\n\r\n)
-                if reader.len() > index + 5 {
-                    up_to_in_reader = index + 3
-                } else {
-                    up_to_in_reader = index + 5; // add 5 to go past the 0\r\n\r\n at the end
-                }
-                break;
-            }
+            chunk_size_hex.push(*octet as char);
         } else if mode == ReadMode::Metadata && on_boundary {
-            // if we're on the boundary, continue, or change mode to read once we've seen \n
+            // if we're on the boundary, continue, or compute chunk length and change mode to read once we've seen \n
             if *octet == b'\n' {
+                let result = usize::from_str_radix(&chunk_size_hex, 16);
+                if result.is_err() {
+                    return ReadResult::Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", *octet as char)));
+                }
+                // reset chunk_size_hex
+                chunk_size_hex = "".to_string();
+                chunk_size = result.unwrap();
+                if chunk_size == 0 {
+                    finished = true;
+                    // if more bytes left then assume there are trailers (which means end is 0\r\n otherwise its 0\r\n\r\n)
+                    if reader.len() > index + 3 {
+                        up_to_in_reader = index + 1
+                    } else {
+                        up_to_in_reader = index + 3; // add 3 to go past the next \n (weve hit the first one in 0\r\n\r\n)
+                    }
+                    break;
+                }
                 mode = ReadMode::Data;
             }
             continue;
@@ -644,7 +640,10 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
             let has_content_length = res.headers.has("Content-Length");
             let headers = ensure_content_length_or_transfer_encoding(res.headers, &res.body, &res.version, has_transfer_encoding, has_content_length);
 
-            let compression = request_options.response_compression();
+            let compression = request_options.write_response_compression()
+                .or(compression_from(headers.get("Transfer-Encoding")))
+                .or(compression_from(headers.get("Content-Encoding")));
+
             let headers = if headers.has("TE") {
                 headers.remove("TE")
             } else { headers };
@@ -652,8 +651,8 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                 headers.replace(("Transfer-Encoding", format!("{}, chunked", compression.to_string_for_transfer_encoding()).as_str()))
             } else { headers };
             let mut headers = headers.remove("Connection");
-            let mut trailers = res.trailers;
 
+            let mut trailers = res.trailers;
             if !request_options.wants_trailers && !trailers.is_empty() {
                 let as_str = request_options.expected_trailers.iter()
                     .map(|x| x.as_str()).collect::<Vec<&str>>();
@@ -661,7 +660,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                 trailers = Headers::empty();
             }
 
-            if request_options.desired_content_encoding.is_some() {
+            if request_options.desired_content_encoding.is_some() && !headers.has("Transfer-Encoding") {
                 headers = headers.replace(("Content-Encoding", compression.to_string_for_content_encoding().as_str()));
             }
 
@@ -705,7 +704,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
 }
 
 fn set_connection_header_if_needed_and_not_present(headers: Headers, chunked_encoding_desired: bool) -> Headers {
-    if chunked_encoding_desired && headers.get("Connection").map(|h| !h.contains("TE")).unwrap_or(true) {
+    if chunked_encoding_desired && headers.get("Connection").map(|h| !h.contains("TE")).unwrap_or(false) {
         headers.replace(("Connection", headers.get("Connection").map(|mut h| {
             h.push_str(", TE");
             h
@@ -763,13 +762,12 @@ pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chun
     let mut request = Vec::new();
     if compression.is_some() {
         compress(&compression, &mut writer, chunk);
-        write_chunk_metadata(&mut first_line, writer.len().to_string());
+        write_chunk_metadata(&mut first_line, writer.len());
         request = [first_line.as_bytes(), writer.as_slice(), "\r\n".as_bytes()].concat();
     } else {
-        write_chunk_metadata(&mut first_line, chunk.len().to_string());
+        write_chunk_metadata(&mut first_line, chunk.len());
         request = [first_line.as_bytes(), chunk, "\r\n".as_bytes()].concat();
     }
-    let mut end = "";
     if !trailers.is_empty() {
         request.extend_from_slice(format!("0\r\n{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
     } else {
@@ -778,8 +776,9 @@ pub fn write_chunked_string(stream: &mut TcpStream, mut first_line: String, chun
     stream.write(request.as_slice()).unwrap();
 }
 
-fn write_chunk_metadata(first_line: &mut String, length: String) {
-    first_line.push_str(length.as_str());
+fn write_chunk_metadata(first_line: &mut String, length: usize) {
+    let length_in_hex = format!("{:X}", length);
+    first_line.push_str(length_in_hex.as_str());
     first_line.push_str("\r\n");
 }
 
@@ -805,7 +804,8 @@ fn write_simple_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read
 
     while bytes_read > 0 {
         temp = Vec::new();
-        temp.extend_from_slice(bytes_read.to_string().as_bytes());
+        let length_in_hex = format!("{:X}", bytes_read);
+        temp.extend_from_slice(length_in_hex.as_bytes());
         temp.push(b'\r');
         temp.push(b'\n');
         let chunk = &buffer[..bytes_read];
@@ -823,7 +823,6 @@ fn write_simple_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn Read
         bytes_read = reader.read(buffer).unwrap();
     }
 
-    // write end byte
     let mut end = vec!(b'0', b'\r', b'\n');
     if !trailers.is_empty() {
         end.extend_from_slice(format!("{}\r\n\r\n", trailers.to_wire_string()).as_bytes());
@@ -846,8 +845,8 @@ fn write_compressed_chunks<'a>(mut stream: &mut TcpStream, reader: &mut Box<dyn 
 
     let mut writer = Vec::new();
     compress(&compression, &mut writer, temp.as_slice());
-    let compressed_length = writer.len().to_string();
-    let reversed = compressed_length.chars().rev().collect::<String>();
+    let compressed_length_in_hex = format!("{:X}", writer.len());
+    let reversed = compressed_length_in_hex.chars().rev().collect::<String>();
     writer.insert(0, b'\n');
     writer.insert(0, b'\r');
     for byte in reversed.as_bytes() {
@@ -1091,7 +1090,7 @@ pub fn body_string(mut body: Body) -> String {
 #[allow(non_snake_case)]
 pub struct RequestOptions {
     pub desired_content_encoding: CompressionAlgorithm,
-    pub desired_transfer_encoding: CompressionAlgorithm,
+    pub transfer_encoding: CompressionAlgorithm,
     pub compression_from_TE_header: CompressionAlgorithm,
     pub content_encoding: CompressionAlgorithm,
     pub wants_trailers: bool,
@@ -1103,7 +1102,7 @@ impl RequestOptions {
     pub fn from(headers: &Headers) -> RequestOptions {
         RequestOptions {
             desired_content_encoding: compression_from(headers.get("Accept-Encoding")),
-            desired_transfer_encoding: compression_from(headers.get("Transfer-Encoding")),
+            transfer_encoding: compression_from(headers.get("Transfer-Encoding")),
             content_encoding: compression_from(headers.get("Content-Encoding")),
             compression_from_TE_header: compression_from(most_desired_encoding(headers.get("TE"))),
             wants_trailers: headers.get("TE").map(|t| t.contains("trailers")).unwrap_or(false),
@@ -1115,16 +1114,22 @@ impl RequestOptions {
         }
     }
 
-    pub fn response_compression(&self) -> CompressionAlgorithm {
+    pub fn read_compression(&self) -> CompressionAlgorithm {
+        self.content_encoding
+            .or(self.transfer_encoding)
+
+    }
+
+    pub fn write_response_compression(&self) -> CompressionAlgorithm {
         self.desired_content_encoding
-            .or(self.desired_transfer_encoding)
+            .or(self.transfer_encoding)
             .or(self.compression_from_TE_header)
     }
 
     pub fn default() -> RequestOptions {
         RequestOptions {
             desired_content_encoding: NONE,
-            desired_transfer_encoding: NONE,
+            transfer_encoding: NONE,
             content_encoding: NONE,
             compression_from_TE_header: NONE,
             wants_trailers: false,

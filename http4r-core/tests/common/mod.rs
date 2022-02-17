@@ -45,11 +45,10 @@ impl Handler for PassHeadersAsBody {
         // this will not get changed by the write_response_to_wire logic that strips various headers etc
         // because we are setting the body here in the handler, before it gets written back to the wire
         let string = req.headers.to_wire_string();
-        let headers_string = string.as_str();
+        let req_headers_string = string.as_str();
         let response = Response::ok(
-            req.headers.replace(("Content-Length", string.len().to_string().as_str())),
-            BodyString(headers_string))
-            .with_trailers(req.trailers);
+            Headers::from(vec!(("Content-Length", string.len().to_string().as_str()))),
+            BodyString(req_headers_string));
         fun(response);
     }
 }
