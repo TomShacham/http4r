@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["LoggingHttpHandler",""],["RustLogger",""],["WasmClock",""]],"trait":[["Clock",""],["Logger",""]]});

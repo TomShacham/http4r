@@ -6,7 +6,7 @@ echo "******** build and test *********"
 cargo test
 
 pushd http4r-core
-crate doc --target-dir doc
+cargo doc --no-deps --target-dir doc
 popd
 
 
