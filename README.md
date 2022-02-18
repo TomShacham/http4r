@@ -47,6 +47,7 @@ Open the project in CLion and Salisbury's your Uncle.
 ## Todos
 
 - example app
+  - sort the docs out so they dont generate docs for libs
   - local webpage that loads in wasm app and runs tests
     - JSON body parser
     - read and write to database
@@ -77,5 +78,8 @@ Open the project in CLion and Salisbury's your Uncle.
 ### Getting started
 
 Docs coming soon
+
+- philosophy of having recipes instead of providing library code or frameworks
+- set content-encoding to none in order to override default browser accept-encoding dictating content type
 
 

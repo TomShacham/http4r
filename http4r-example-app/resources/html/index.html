@@ -28,10 +28,10 @@
     <div class="doc-font block w-2/3">
         <div class="mb-4">The main benefits of http4r over other web frameworks:</div>
         <ul>
-            <li class="mb-4"><b class="text-base">1</b> Simple "server as a function" means you can unit test your App
+            <li class="mb-4"><b class="text-base">1</b> Simple "server as a function" means you can unit test your App. It's just a Struct that implements Handler.
             </li>
-            <li class="mb-4"><b class="text-base">2</b> Easily extend core functionality by composing handlers</li>
-            <li class="mb-4"><b class="text-base">3</b> Symmetric client and server ie. both are http handlers</li>
+            <li class="mb-4"><b class="text-base">2</b> Easily extend core functionality by composing Handlers</li>
+            <li class="mb-4"><b class="text-base">3</b> Symmetric client and server ie. both are Http Handlers</li>
             <li class="mb-4"><b class="text-base">4</b> This makes it very easy to sub in and out dependencies eg a
                 FakeThirdPartyClient {}
             </li>
@@ -41,9 +41,9 @@
             <li class="mb-4"><b class="text-base">6</b> Even better, we can compile our App to WASM and run unit tests
                 in the browser.
             </li>
-            <li class="mb-4"><b class="text-base">7</b> It is blazingly fast and uses minimal dependencies.</li>
+            <li class="mb-4"><b class="text-base">7</b> It is blazingly fast and uses minimal dependencies. Spin up a server and run a test in 1ms.</li>
             <li class="mb-4"><b class="text-base">8</b> It is synchronous for the sake of simplicity - if you think you
-                need async, you don't.
+                need async, you probably don't.
             </li>
         </ul>
     </div>
@@ -95,7 +95,7 @@ impl&lt;H&gt; Handler for NotFoundHandler&lt;H&gt; where H: Handler {
 </div>
 <div class="flex bg-colour font p-4 sm:p-8 flex-col items-center hidden lg:flex">
     <div class="block w-2/3">
-        <div class="mb-4">We can easily test the above because it's just a function.</div>
+        <div class="mb-4">We can easily test the above because it's just a Struct implementing Handler.</div>
         <div class="mb-4">We can write an "in-memory" test like this:</div>
     </div>
 </div>
@@ -106,9 +106,9 @@ fn not_found() {
     let mut not_found_handler = NotFoundHandler::new(
         StaticFileHandler::new("./resources/html", "test".to_string())
     );
-    let unknown_route = Request::get(Uri::parse("/unknown/route"), Headers::empty());
+    let request_to_unknown_route = Request::get(Uri::parse("/unknown/route"), Headers::empty());
 
-    not_found_handler.handle(unknown_route, |res| {
+    not_found_handler.handle(request_to_unknown_route, |res| {
         assert_eq!(res.status, NotFound);
         assert_eq!(body_string(res.body), "Our custom 404 page!")
     });
@@ -126,11 +126,17 @@ fn not_found() {
 fn not_found() {
     // start server on port 0 (finds next available port)
     let mut server = Server::new(0);
-    // hide the construction of our handlers behind convenience method App::in_memory
-    server.test(|| { Ok(App::in_memory(Environment::empty())) });
 
+    // starts the server up for a test (same as server.start except
+    //   it is run in a thread so it closes at the end of the test)
+    server.test(|| { Ok(NotFoundHandler::new(
+        StaticFileHandler::new("./resources/html")
+    ))});
+
+    // a new http client for localhost
     let mut client = Client::new("127.0.0.1", server.port, None);
     client.handle(Request::get(Uri::parse("/unknown/route"), Headers::empty()), |res| {
+        // assert on response body
         assert_eq!(body_string(res.body), "Our custom 404 page!");
     })
 }
@@ -141,17 +147,17 @@ fn not_found() {
         <div class="mb-4">And there we have it!</div>
         <div class="mb-4">Above you can see that:</div>
         <ul>
-            <li class="mb-4"><b class="text-base">1</b> We can test our App "in-memory" by calling handle on our App (or in this case our NotFoundHandler)
+            <li class="mb-4"><b class="text-base">1</b> We can test our Handler "in-memory" by calling handle on our Handler (in this case our NotFoundHandler)
             </li>
-            <li class="mb-4"><b class="text-base">2</b> We can start our App as a Server easily</li>
-            <li class="mb-4"><b class="text-base">3</b> We can then test our App "over-the-wire", sending a Request with client.handle</li>
+            <li class="mb-4"><b class="text-base">2</b> We can start our Handler as a Server easily</li>
+            <li class="mb-4"><b class="text-base">3</b> We can then test our Handler "over-the-wire", sending a Request with client.handle</li>
             <li class="mb-4"><b class="text-base">4</b> The client and server are symmetric ie. both are Handlers
             </li>
             <li class="mb-4"><b class="text-base">5</b> We can easily extend the core logic by writing Handlers that delegate to the next Handler
-                (in fact this is how the library code is written, eg. Zipkin tracing)
+                (in fact this is how the library code is written)
             </li>
         </ul>
-        <div class="mb-4">On top of this, it runs extremely quickly. The last time I ran this end to end test it took less than 1ms !</div>
+        <div class="mb-4">On top of this, it runs extremely quickly. The last time I ran this end-to-end test it took less than 1ms !</div>
         <div class="mb-4">Imagine if your entire test suite ran in under 1 second!</div>
     </div>
 </div>
