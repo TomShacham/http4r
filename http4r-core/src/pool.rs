@@ -12,6 +12,7 @@ type Job = Box<dyn FnOnce() + Send + 'static>;
 
 impl ThreadPool {
     pub fn new(size: usize) -> ThreadPool {
+        println!("New pool of size {}", size);
         assert!(size > 0);
         let (sender, receiver) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(receiver));
@@ -61,15 +62,23 @@ pub struct Worker {
 impl Worker {
     fn new(receiver: Arc<Mutex<Receiver<Message>>>) -> Worker {
         Worker {
-            thread: Some(thread::spawn(move || loop {
-                let message = receiver.lock().unwrap().recv().unwrap();
+            thread: Some(thread::spawn(move || {
+                loop {
+                    let result = receiver.lock();
+                    println!("lock result is ok? {}", result.is_ok());
+                    let result1 = result.unwrap().recv();
+                    println!("Recv result is ok? {}", result1.is_ok());
+                    let message = result1.unwrap();
 
-                match message {
-                    Message::NewJob(job) => {
-                        job();
-                    }
-                    Message::Terminate => {
-                        break;
+                    match message {
+                        Message::NewJob(job) => {
+                            println!("Making new job!");
+                            job();
+                        }
+                        Message::Terminate => {
+                            println!("Terminating job!");
+                            break;
+                        }
                     }
                 }
             })),

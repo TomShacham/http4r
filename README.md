@@ -48,8 +48,10 @@ Open the project in CLion and Salisbury's your Uncle.
 
 - example app
   - sort the docs out so they dont generate docs for libs
+    - just generate docs in build pipeline, not committed to git
   - local webpage that loads in wasm app and runs tests
     - JSON body parser
+    - why does Heroku app stop accepting requests after a few mins?
     - read and write to database
     - reach out to some 3rd party api
     - do some basic auth or cookie thing
