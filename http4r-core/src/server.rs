@@ -46,6 +46,7 @@ If you are using this software for profit, please consider sponsorship :-)".trim
 
         for stream in listener.incoming() {
             let h = handler.clone();
+            println!("stream in");
             pool.execute(move || {
                 Self::handle_request(h, stream.unwrap())
             });

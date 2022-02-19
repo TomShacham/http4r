@@ -64,11 +64,7 @@ impl Worker {
         Worker {
             thread: Some(thread::spawn(move || {
                 loop {
-                    let result = receiver.lock();
-                    println!("lock result is ok? {}", result.is_ok());
-                    let result1 = result.unwrap().recv();
-                    println!("Recv result is ok? {}", result1.is_ok());
-                    let message = result1.unwrap();
+                    let message = receiver.lock().unwrap().recv().unwrap();
 
                     match message {
                         Message::NewJob(job) => {
@@ -76,7 +72,6 @@ impl Worker {
                             job();
                         }
                         Message::Terminate => {
-                            println!("Terminating job!");
                             break;
                         }
                     }
