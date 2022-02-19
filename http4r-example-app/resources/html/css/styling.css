@@ -33,6 +33,35 @@ a {
     color: #0a042f;
 }
 
+.collapsible::before {
+    border-bottom: 3px solid cornflowerblue;
+    width: 50%;
+    margin-bottom: 15px;
+    align-self: flex-start;
+    cursor: pointer;
+}
+
+.collapsible[data-content]:before {
+    content: attr(data-content) "\00a0\00a0\00a0⬇️";
+}
+.collapsible.collapsed[data-content]:before {
+    content: attr(data-content) "\00a0\00a0\00a0➡️";
+}
+
+
+.collapsible {
+    max-height: 500px;
+    overflow: visible;
+    opacity: 1;
+}
+
+.collapsible.collapsed {
+    max-height: 3.75rem;
+    opacity: 0.5;
+    transition: max-height 0.25s ease-in, opacity 0.25s ease-in;
+    overflow: hidden;
+}
+
 /*
     CODE HIGHLIGHTING
  */
