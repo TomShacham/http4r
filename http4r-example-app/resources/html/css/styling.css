@@ -50,7 +50,7 @@ a {
 
 
 .collapsible {
-    max-height: 500px;
+    max-height: 2000px;
     overflow: visible;
     opacity: 1;
 }
@@ -58,7 +58,7 @@ a {
 .collapsible.collapsed {
     max-height: 3.75rem;
     opacity: 0.5;
-    transition: max-height 0.25s ease-in, opacity 0.25s ease-in;
+    transition: max-height 0.1s ease-in, opacity 0.1s ease-in;
     overflow: hidden;
 }
 

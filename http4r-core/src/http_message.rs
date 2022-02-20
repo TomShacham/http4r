@@ -20,7 +20,6 @@ use std::io::{copy, Read, Write};
 use std::net::TcpStream;
 use std::str;
 use std::str::from_utf8;
-use flate2::Compression;
 use crate::codex::Codex;
 
 use crate::headers::{DISALLOWED_TRAILERS, Headers};
@@ -660,7 +659,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
             if headers.has("TE") {
                 headers = headers.remove("TE")
             };
-            ;
+
             headers = headers.remove("Connection");
 
             let mut trailers = res.trailers;

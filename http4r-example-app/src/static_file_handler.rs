@@ -3,7 +3,7 @@ use std::fs::{canonicalize, File};
 use std::io::{Error, Read};
 use std::str::from_utf8;
 use http4r_core::handler::Handler;
-use http4r_core::headers::{cache_control_header, content_length_header, content_type_header, Headers};
+use http4r_core::headers::{cache_control_header, content_type_header, Headers};
 use http4r_core::http_message::{Request, Response};
 use http4r_core::http_message::Body::{BodyStream, BodyString};
 

@@ -47,6 +47,7 @@ Open the project in CLion and Salisbury's your Uncle.
 ## Todos
 
 - example app
+  - replace threadpool with a crate ?
   - sort the docs out so they dont generate docs for libs
     - just generate docs in build pipeline, not committed to git
   - local webpage that loads in wasm app and runs tests
