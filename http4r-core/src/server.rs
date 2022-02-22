@@ -8,7 +8,6 @@ use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message::{HttpMessage, read_message_from_wire, MessageError, RequestOptions, Response, write_message_to_wire};
 use crate::http_message::Body::{BodyString};
-use crate::pool::ThreadPool;
 
 pub struct Server {
     pub port: u16,
@@ -34,23 +33,6 @@ impl Server where {
     }
 
     pub fn start<F, H>(&mut self, fun: F)
-        where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
-        let listener = self.listen();
-        let handler = Arc::new(fun);
-
-        let pool = ThreadPool::new(10 as usize);
-
-        for stream in listener.incoming() {
-            let h = handler.clone();
-            println!("stream in");
-            pool.execute(move || {
-                println!("executing");
-                Self::handle_request(h, stream.unwrap())
-            });
-        }
-    }
-
-    pub fn test<F, H>(&mut self, fun: F, close: Option<Box<dyn Fn() -> bool>>)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
         let listener = self.listen();
         let handler = Arc::new(fun);

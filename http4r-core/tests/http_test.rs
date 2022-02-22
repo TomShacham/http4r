@@ -20,7 +20,7 @@ mod tests {
     #[test]
     fn client_over_http_get() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) });
         let mut client = Client::new("127.0.0.1", server.port, None);
         let request = Request::get(Uri::parse("/"), Headers::empty());
 
@@ -36,7 +36,7 @@ mod tests {
         let long_string = "t".repeat(20000);
 
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) });
         let mut client = Client::new("127.0.0.1", server.port, None);
         let post_with_stream_body = Request::post(
             Uri::parse("/"),
@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn can_handle_no_headers() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) });
         let mut client = Client::new("127.0.0.1", server.port, None);
         let no_headers = Request::get(Uri::parse("/"), Headers::empty());
 
@@ -90,7 +90,7 @@ mod tests {
 
         //http
         let mut server = Server::new(0);
-        server.test(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger {}, WasmClock {}, Router {}), HashMap::new())));
+        server.start(|| Ok(RedirectToHttpsHandler::new(LoggingHttpHandler::new(RustLogger {}, WasmClock {}, Router {}), HashMap::new())));
         let mut client = Client::new("127.0.0.1", server.port, None);
         let request = Request::get(Uri::parse("/"), Headers::empty());
 

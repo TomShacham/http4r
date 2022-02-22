@@ -17,7 +17,7 @@ mod tests {
     #[test]
     fn setting_a_TE_header_will_ensure_it_is_set_in_Connection_header_also(){
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassHeadersAsBody {}) });
+        server.start(|| { Ok(PassHeadersAsBody {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 

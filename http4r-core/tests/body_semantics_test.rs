@@ -15,7 +15,7 @@ mod tests {
     #[test]
     fn method_semantics_ignore_body_of_get_head_options_connect_trace() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) });
 
         let mut client = WithContentLength::new(
             Client::new("127.0.0.1", server.port, None)

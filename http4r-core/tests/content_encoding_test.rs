@@ -15,7 +15,7 @@ mod tests {
     #[test]
     fn encode_body_using_accept_encoding_prefers_brotli() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(("Accept-Encoding", "gzip, deflate, br")));
@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn client_can_send_a_compressed_message() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(("Content-Encoding", "br")));
@@ -65,7 +65,7 @@ mod tests {
     #[test]
     fn compressed_body_stream() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(
@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn accept_encoding_wins_over_transfer_encoding_as_client_may_send_in_one_format_and_accept_in_another() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(PassHeadersAsBody {}) });
+        server.start(|| { Ok(PassHeadersAsBody {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn setting_response_header_of_content_encoding_none_wins_over_everything() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(SetContentEncodingToNoneAndEchoHeaders {}) });
+        server.start(|| { Ok(SetContentEncodingToNoneAndEchoHeaders {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn transfer_encoding_wins_over_content_encoding_as_client_may_send_in_one_format_and_accept_in_another() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(EchoBodyHandler {}) });
+        server.start(|| { Ok(EchoBodyHandler {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn TE_wins_over_content_encoding_as_client_may_send_in_one_format_and_accept_in_another() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(EchoBodyHandler {}) });
+        server.start(|| { Ok(EchoBodyHandler {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn if_content_encoding_on_its_way_in_then_dont_compress_on_way_back_without_accept_encoding() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(EchoBodyHandler {}) });
+        server.start(|| { Ok(EchoBodyHandler {}) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let headers = Headers::from(vec!(

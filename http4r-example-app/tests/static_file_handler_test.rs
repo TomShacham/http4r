@@ -45,7 +45,7 @@ mod tests {
     fn static_file_handler_loads_icons_over_http() {
         let mut server = Server::new(0);
 
-        server.test(|| { Ok(StaticFileHandler::new("/resources/html", "test".to_string()))} );
+        server.start(|| { Ok(StaticFileHandler::new("/resources/html", "test".to_string()))} );
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 

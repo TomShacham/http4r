@@ -27,7 +27,7 @@ mod tests {
     #[test]
     fn static_file_handler_home_page() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(App::in_memory(Environment::empty())) });
+        server.start(|| { Ok(App::in_memory(Environment::empty())) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         client.handle(Request::get(Uri::parse("/"), Headers::empty()), |res| {
@@ -38,7 +38,7 @@ mod tests {
     #[test]
     fn file_not_found_results_in_404() {
         let mut server = Server::new(0);
-        server.test(|| { Ok(App::in_memory(Environment::empty())) });
+        server.start(|| { Ok(App::in_memory(Environment::empty())) });
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         client.handle(Request::get(Uri::parse("/some/unknown/file.html"), Headers::empty()), |res| {

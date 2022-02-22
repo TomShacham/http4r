@@ -11,10 +11,10 @@ fn main() {
     let port = env.get("PORT").map(|p| p.parse::<u16>().unwrap_or(0));
     let mut server = Server::new(port.unwrap_or(0));
 
-    server.test(move || {
+    server.start(move || {
             Ok(App::production(env.copy()))
         },
-                None);
+                 None);
 }
 
 
