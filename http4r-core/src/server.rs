@@ -1,7 +1,9 @@
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::io::{Write};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::thread::{sleep};
+use std::time::Duration;
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message::{HttpMessage, read_message_from_wire, MessageError, RequestOptions, Response, write_message_to_wire};
@@ -34,12 +36,6 @@ impl Server where {
     pub fn start<F, H>(&mut self, fun: F)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
         let listener = self.listen();
-        println!("Server listening on port {}", self.port);
-        println!("{}", "http4r  Copyright (C) 2021  Tom Shacham
-This program comes with ABSOLUTELY NO WARRANTY.
-This is free software, and you are welcome to redistribute it
-under certain conditions.
-If you are using this software for profit, please consider sponsorship :-)".trim());
         let handler = Arc::new(fun);
 
         let pool = ThreadPool::new(10 as usize);
@@ -48,21 +44,23 @@ If you are using this software for profit, please consider sponsorship :-)".trim
             let h = handler.clone();
             println!("stream in");
             pool.execute(move || {
+                println!("executing");
                 Self::handle_request(h, stream.unwrap())
             });
         }
     }
 
-    pub fn test<F, H>(&mut self, fun: F)
+    pub fn test<F, H>(&mut self, fun: F, close: Option<Box<dyn Fn() -> bool>>)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
         let listener = self.listen();
         let handler = Arc::new(fun);
 
-        thread::spawn(move || {
-            for stream in listener.incoming() {
-                Self::handle_request(handler.clone(), stream.unwrap());
-            }
-        });
+        for stream in listener.incoming() {
+            let h = handler.clone();
+            thread::spawn(move || {
+                Self::handle_request(h.clone(), stream.unwrap());
+            });
+        }
     }
 
     fn listen(&mut self) -> TcpListener {

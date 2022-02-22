@@ -3,15 +3,15 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 function collapsible() {
-    document.querySelectorAll(".collapsible").forEach(el => {
+    document.querySelectorAll(".collapsible > span").forEach(el => {
         el.addEventListener("click", function (e) {
-            console.log(e.pageY, el.offsetTop)
-            if (e.pageY < el.offsetTop + (window.innerWidth/8)  && e.pageY > el.offsetTop + (window.innerWidth/50)) {
-                if (el.classList.contains("collapsed")) {
-                    el.classList.remove("collapsed");
-                } else {
-                    el.classList.add("collapsed");
-                }
+            const parent = el.parentElement;
+            if (parent.classList.contains("collapsed")) {
+                parent.classList.remove("collapsed");
+                el.innerText = (el.innerText.slice(0, el.innerText.length - 2)) + "⬇️";
+            } else {
+                parent.classList.add("collapsed");
+                el.innerText = (el.innerText.slice(0, el.innerText.length-2)) + "➡️"
             }
         });
     })

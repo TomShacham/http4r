@@ -33,21 +33,13 @@ a {
     color: #0a042f;
 }
 
-.collapsible::before {
+.collapsible > span {
     border-bottom: 3px solid cornflowerblue;
     width: 50%;
     margin-bottom: 15px;
     align-self: flex-start;
     cursor: pointer;
 }
-
-.collapsible[data-content]:before {
-    content: attr(data-content) "\00a0\00a0\00a0⬇️";
-}
-.collapsible.collapsed[data-content]:before {
-    content: attr(data-content) "\00a0\00a0\00a0➡️";
-}
-
 
 .collapsible {
     max-height: 2000px;
@@ -60,6 +52,10 @@ a {
     opacity: 0.5;
     transition: max-height 0.1s ease-in, opacity 0.1s ease-in;
     overflow: hidden;
+}
+
+.quote {
+    border-left: 5px solid lightgray;
 }
 
 /*

@@ -31,6 +31,7 @@ impl ThreadPool {
 
     pub fn execute<F>(&self, f: F)
         where F: FnOnce() + Send + 'static, {
+        println!("Box new");
         let job = Box::new(f);
         println!("Calling sender.send");
         self.sender.send(NewJob(job)).unwrap();
