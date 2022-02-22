@@ -35,7 +35,7 @@ a {
 
 .collapsible > span {
     border-bottom: 3px solid cornflowerblue;
-    width: 50%;
+    width: 90%;
     margin-bottom: 15px;
     align-self: flex-start;
     cursor: pointer;
@@ -47,7 +47,12 @@ a {
     opacity: 1;
 }
 
+.sub-section {
+    margin-left: 20px;
+}
+
 .collapsible.collapsed {
+    min-height: 80px;
     max-height: 3.75rem;
     opacity: 0.5;
     transition: max-height 0.1s ease-in, opacity 0.1s ease-in;

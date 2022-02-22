@@ -12,9 +12,8 @@ fn main() {
     let mut server = Server::new(port.unwrap_or(0));
 
     server.start(move || {
-            Ok(App::production(env.copy()))
-        },
-                 None);
+        Ok(App::production(env.copy()))
+    });
 }
 
 
