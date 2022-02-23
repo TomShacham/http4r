@@ -1,9 +1,7 @@
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::io::{Write};
-use std::sync::{Arc, Mutex};
-use std::thread::{sleep};
-use std::time::Duration;
+use std::sync::{Arc};
 use crate::handler::Handler;
 use crate::headers::Headers;
 use crate::http_message::{HttpMessage, read_message_from_wire, MessageError, RequestOptions, Response, write_message_to_wire};
@@ -32,24 +30,29 @@ impl Server where {
         }
     }
 
-    pub fn start<F, H>(&mut self, fun: F)
+    pub fn start<F, H>(&mut self, fun: F, close_on_finish: bool)
         where F: Fn() -> Result<H, String> + Send + Sync + 'static, H: Handler {
         let listener = self.listen();
         let handler = Arc::new(fun);
 
+        if close_on_finish {
+            thread::spawn(|| {
+                Self::handle_tcp_stream(listener, handler)
+            });
+        } else {
+            Self::handle_tcp_stream(listener, handler);
+        };
+    }
+
+    fn handle_tcp_stream<F, H>(listener: TcpListener, handler: Arc<F>)
+        where F: Fn() -> Result<H, String> + Send + Sync + 'static,
+              H: Handler {
         for stream in listener.incoming() {
             let h = handler.clone();
             thread::spawn(move || {
                 Self::handle_request(h.clone(), stream.unwrap());
             });
         }
-    }
-
-    fn listen(&mut self) -> TcpListener {
-        let addr = format!("0.0.0.0:{}", self.port);
-        let listener = TcpListener::bind(addr).unwrap();
-        self.port = listener.local_addr().unwrap().port();
-        listener
     }
 
     fn handle_request<F, H>(handler: Arc<F>, mut stream: TcpStream)
@@ -98,5 +101,12 @@ impl Server where {
         };
 
         stream.flush().unwrap();
+    }
+
+    fn listen(&mut self) -> TcpListener {
+        let addr = format!("0.0.0.0:{}", self.port);
+        let listener = TcpListener::bind(addr).unwrap();
+        self.port = listener.local_addr().unwrap().port();
+        listener
     }
 }

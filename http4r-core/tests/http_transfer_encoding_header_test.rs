@@ -27,7 +27,7 @@ mod tests {
     #[test]
     fn transfer_encoding_wins_over_content_length() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn large_chunked_request() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn can_include_boundary_characters_in_chunk() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
         let with_encoding = "hello\r\n";
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn supports_trailers_parsing_into_a_body() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
@@ -153,7 +153,7 @@ When a chunked message containing a non-empty trailer is received,
     #[test]
     fn cannot_set_certain_trailers_as_headers() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
@@ -207,7 +207,7 @@ When a chunked message containing a non-empty trailer is received,
     #[test]
     fn dont_get_trailers_unless_TE_specified() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
         let mut client = Client::new("127.0.0.1", server.port, None);
 
         let body = "hello";
@@ -323,7 +323,7 @@ When a chunked message containing a non-empty trailer is received,
     #[test]
     fn TE_with_ranked_compression() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
         let mut client = Client::new("127.0.0.1", server.port, None);
 
         let body = "hello".repeat(10000);
@@ -404,7 +404,7 @@ When a chunked message containing a non-empty trailer is received,
     #[test]
     fn if_trailers_are_too_long_we_get_an_error() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
         let mut client = Client::new("127.0.0.1", server.port, None);
 
         let very_long_trailer = "A very long trailer. ".repeat(1000);
@@ -435,21 +435,21 @@ When a chunked message containing a non-empty trailer is received,
     #[test]
     fn best_request_if_invalid_boundary_digit() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
         let mut stream = TcpStream::connect(format!("127.0.0.1:{}", server.port)).unwrap();
 
         let mut client = MalformedChunkedEncodingClient { port: server.port };
 
         client.handle(Request::get(Uri::parse("/"), Headers::from(vec!(("Transfer-encoding" , "chunked")))), |res| {
+            assert_eq!(body_string(res.body), "Could not parse boundary character X in chunked encoding".to_string());
             assert_eq!(res.status, Status::BadRequest);
-            assert_eq!(body_string(res.body), "Could not parse boundary character X in chunked encoding".to_string())
         })
     }
 
     #[test]
     fn writing_a_chunked_body_stream() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 

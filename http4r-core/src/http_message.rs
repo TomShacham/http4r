@@ -383,7 +383,7 @@ fn body_chunks_(reader: &[u8], writer: &mut Vec<u8>, mut mode: ReadMode, read_up
             if *octet == b'\n' {
                 let result = usize::from_str_radix(&chunk_size_hex, 16);
                 if result.is_err() {
-                    return ReadResult::Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", *octet as char)));
+                    return ReadResult::Err(MessageError::InvalidBoundaryDigit(format!("Could not parse boundary character {} in chunked encoding", &chunk_size_hex)));
                 }
                 // reset chunk_size_hex
                 chunk_size_hex = "".to_string();
@@ -591,13 +591,13 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
 
             let headers = set_connection_header_if_needed_and_not_present(headers, chunked_encoding_desired);
 
-            let start_line = format!("{} {} HTTP/{}.{}",
+            let start_line = format!("{} {} HTTP/{}.{}\r\n",
                                      req.method.value(),
                                      req.uri.to_string(),
                                      req.version.major,
                                      req.version.minor);
 
-            let start_line_and_headers = format!("{}\r\n{}\r\n\r\n", start_line, headers.to_wire_string());
+            let start_line_and_headers = format!("{}{}\r\n\r\n", start_line, headers.to_wire_string());
 
             match req.body {
                 BodyString(str) => {

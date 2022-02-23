@@ -16,7 +16,7 @@ mod tests {
     #[test]
     fn duplicate_different_content_length_headers_result_in_bad_request() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
@@ -32,7 +32,7 @@ mod tests {
     #[test]
     fn duplicate_same_content_lengths_are_fine(){
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn content_length_must_be_positive(){
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 
@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn duplicate_invalid_lengths_are_invalid() {
         let mut server = Server::new(0);
-        server.start(|| { Ok(PassThroughHandler {}) });
+        server.start(|| { Ok(PassThroughHandler {}) }, true);
 
         let mut client = Client::new("127.0.0.1", server.port, None);
 

@@ -13,7 +13,7 @@ fn main() {
 
     server.start(move || {
         Ok(App::production(env.copy()))
-    });
+    }, false);
 }
 
 
