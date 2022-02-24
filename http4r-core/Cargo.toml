@@ -1,7 +1,15 @@
 [package]
 name = "http4r-core"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Simple, synchronous, symmetric client and server as a function"
+homepage = "https://http4r.com/"
+documentation = "https://htt4p4r.com/docs"
+repository = "https://github.com/TomShacham/http4r"
+readme = "README.md"
+keywords = ["web", "http", "server", "client", "synchronous"]
+exclude = ["tests"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
