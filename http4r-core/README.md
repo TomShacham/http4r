@@ -6,7 +6,22 @@ The main contract and functionality of http4r.
 
 - Handler, Server and Client
 - Writing/reading http messages to/from wire
-- Abstractions for Uri, Headers, Query etc. 
+- Immutable Request, Response, Uri, Headers, Query etc.
+- Supports simple messages, streams, compression and chunked encoding
+- Coming soon: multipart, x-www-form-urlencoded
+
+### Philosophy
+
+- Simplicity:
+  - Prefer a simple synchronous abstraction over http
+  - Extension by composition not configuration
+- Minimalism: 
+  - use as few dependencies as possible to reduce surface area, crate size and upgrade complexity
+  - do not publish convenience functions etc. rather share recipes in the docs
+- Compatibility:
+  - try to maintain backwards compatibility
+  - but unlike Rust itself, prefer to break it over keeping a hamstring-ing abstraction
+    - to reduce the likelihood of this, do not publish convenience functions as mentioned above!
 
 ### About
 
