@@ -6,6 +6,7 @@
     <title>http4r Example App</title>
     <script src="/js/tailwind-3.0.18.js"></script>
     <script src="/js/highlightjs.js"></script>
+    <script src="/js/some-js.js"></script>
     <link rel="stylesheet" href="/css/styling.css" type="text/css"/>
 </head>
 <body>
@@ -17,4 +18,24 @@
         <div class="ml-4"><a href="/docs/recipes" class="font no-underline">Recipes</a></div>
     </div>
 </div>
-<img src="/images/profile.jpeg" width="50px" height="50px" />
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible">
+    <span>installing Rust ⬇️</span>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        Follow instructions from <a href="https://www.rust-lang.org/tools/install">rust-lang</a> to install rustup.
+    </div>
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible">
+    <span>making a new project ⬇️</span>
+    <div class="doc-font block mb-2 w-4/5 md:w-2/3 2xl:w-2/5">
+        Follow instructions about <a href="https://doc.rust-lang.org/cargo/commands/cargo-new.html">cargo</a> to make a new project.
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        Or run <code>cargo new &lt;my-project&gt;</code>
+    </div>
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible">
+    <span>add http4r ⬇️</span>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        Run <code>cargo install http4r</code> as described <a href="https://doc.rust-lang.org/cargo/commands/cargo-install.html">here</a>
+    </div>
+</div>

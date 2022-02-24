@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 function colourCode() {
-    document.querySelectorAll("code").forEach(el => {
+    document.querySelectorAll("pre code").forEach(el => {
         el.innerHTML = fold(tokenise(el));
     })
 }
