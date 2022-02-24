@@ -107,7 +107,7 @@ name = "http4r-browser"
 version = "0.0.1"
 dependencies = [
  "console_error_panic_hook",
- "http4r-core",
+ "http4r-core 0.0.0",
  "instant",
  "js-sys",
  "serde_json",
@@ -125,10 +125,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "http4r-example-app"
-version = "0.1.0"
+name = "http4r-core"
+version = "0.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b984285a606a1aef39258c322c64a6a761f3d8c0f0db33a0b86ce7f22e44b13e"
 dependencies = [
- "http4r-core",
+ "brotli",
+ "flate2",
+ "regex",
+]
+
+[[package]]
+name = "http4r-example-app"
+version = "0.0.0"
+dependencies = [
+ "http4r-core 0.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

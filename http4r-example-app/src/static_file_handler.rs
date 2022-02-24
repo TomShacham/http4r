@@ -20,25 +20,54 @@ impl<'a> StaticFileHandler<'a> {
     }
 
     fn ok_or_not_found(path: String, file: Result<File, Error>, mut vec: &mut Vec<u8>, is_img: bool) -> Response {
+        let result = Self::try_read_file(file, &mut vec);
+        if result.is_err() {
+            return Response::not_found(Headers::empty(), BodyString(result.err().unwrap()));
+        }
+        let (content_type, cache_control) = Self::headers_for(path);
+        let headers = Headers::from(vec!(
+            content_type_header(content_type),
+            cache_control_header(cache_control),
+            // add content length header if you want... otherwise chunked encoding will be used
+            // content_length_header(vec.len().to_string().as_str())
+        ));
+        if is_img {
+            Response::ok(headers.add(("Content-Encoding", "none")), BodyStream(Box::new(vec.as_slice())))
+        } else {
+            let str = from_utf8(vec.as_slice());
+            if str.is_err() {
+                println!("Could not read body into utf-8.");
+                return Response::not_found(Headers::empty(), BodyString("Could not read body into utf-8."))
+            }
+            let body = str.unwrap();
+            Response::ok(headers, BodyString(body))
+        }
+    }
+
+    fn try_read_file(file: Result<File, Error>, mut vec: &mut &mut Vec<u8>) -> Result<(), &'static str> {
         if file.is_err() {
             println!("Could not open file.");
-            return Response::not_found(Headers::empty(), BodyString("Could not open file."));
+            return Err("Could not open file.");
         }
         let mut file = file.unwrap();
         let metadata = file.metadata();
         if metadata.is_err() {
             println!("Could not get metadata for file.");
-            return Response::not_found(Headers::empty(), BodyString("Could not get metadata for file."))
+            return Err("Could not get metadata for file.")
         }
         if !metadata.unwrap().is_file() {
             println!("Not a file but a directory or symlink.");
-            return Response::not_found(Headers::empty(), BodyString("Not a file but a directory or symlink."))
+            return Err("Not a file but a directory or symlink.")
         }
         let read = file.read_to_end(&mut vec);
         if read.is_err() {
             println!("Failed to read file.");
-            return Response::not_found(Headers::empty(), BodyString("Failed to read file."))
+            return Err("Failed to read file.")
         }
+        Ok(())
+    }
+
+    fn headers_for(path: String) -> (&'a str, &'a str) {
         let (content_type, cache_control) = if path.ends_with(".html") {
             ("text/html", "private, max-age=10")
         } else if path.ends_with(".js") {
@@ -62,22 +91,7 @@ impl<'a> StaticFileHandler<'a> {
         } else {
             ("text/plain", "no-store")
         };
-        let headers = Headers::from(vec!(
-            content_type_header(content_type),
-            cache_control_header(cache_control),
-            // content_length_header(vec.len().to_string().as_str())
-        ));
-        if is_img {
-            Response::ok(headers.add(("Content-Encoding", "none")), BodyStream(Box::new(vec.as_slice())))
-        } else {
-            let str = from_utf8(vec.as_slice());
-            if str.is_err() {
-                println!("Could not read body into utf-8.");
-                return Response::not_found(Headers::empty(), BodyString("Could not read body into utf-8."))
-            }
-            let body = str.unwrap();
-            Response::ok(headers, BodyString(body))
-        }
+        (content_type, cache_control)
     }
 }
 

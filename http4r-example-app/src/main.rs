@@ -1,5 +1,4 @@
 use std::env;
-use std::option::Option::None;
 use http4r_core::server::Server;
 use http4r_example_app::app::App;
 use http4r_example_app::environment::Environment;
