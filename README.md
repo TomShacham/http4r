@@ -47,22 +47,24 @@ Open the project in CLion and Salisbury's your Uncle.
 ## Todos
 
 - example app
-  - replace threadpool with a crate ?
-  - sort the docs out so they dont generate docs for libs
-    - just generate docs in build pipeline, not committed to git
   - local webpage that loads in wasm app and runs tests
     - JSON body parser
-    - why does Heroku app stop accepting requests after a few mins?
     - read and write to database
     - reach out to some 3rd party api
     - do some basic auth or cookie thing
       - checkout edge workers
----
+
+
+--- 
+- build pipeline
+- do not rely on nightly otherwise clients have to use it too
 - core api
+  - use threadpool ?
+  - sort the docs out so they dont generate docs for libs
+  - just generate docs in build pipeline, not committed to git
+  - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - support multipart form data and application url form encoded 
   - limits on headers and body etc tests // sort out these vecs that are being allocated
-  - publish crate
-  - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - default response headers, content-type, content-length, date
   - client to use Host header eg Dan's
   - 
