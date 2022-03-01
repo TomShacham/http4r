@@ -5,37 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>http4r Example App</title>
     <script src="/js/tailwind-3.0.18.js"></script>
-    <script src="/js/highlightjs.js"></script>
-    <script src="/js/some-js.js"></script>
+    <script src="/js/highlight.js"></script>
+    <script src="/js/collapse.js"></script>
     <link rel="stylesheet" href="/css/styling.css" type="text/css"/>
 </head>
 <body>
 <div class="flex full-width justify-between bg-colour p-4 sm:p-8 font text-xs sm:text-base">
-    <div><a href="/http4r" class="font text-lg no-underline">http4r</a> </div>
+    <div><a href="/" class="font text-lg no-underline">http4r</a></div>
     <div></div>
     <div class="flex space-around sm:w-1/3 w-1/2 justify-around">
         <div class="hidden sm:block"><a href="/docs/get-started" class="font no-underline">Get started</a></div>
         <div class="ml-4"><a href="/docs/recipes" class="font no-underline">Recipes</a></div>
     </div>
 </div>
-<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible">
-    <span>installing Rust ⬇️</span>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>installing Rust ➡️</span>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
         Follow instructions from <a href="https://www.rust-lang.org/tools/install">rust-lang</a> to install rustup.
     </div>
 </div>
-<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible">
-    <span>making a new project ⬇️</span>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>making a new project ➡️</span>
     <div class="doc-font block mb-2 w-4/5 md:w-2/3 2xl:w-2/5">
-        Follow instructions about <a href="https://doc.rust-lang.org/cargo/commands/cargo-new.html">cargo</a> to make a new project.
+        Follow instructions about <a href="https://doc.rust-lang.org/cargo/commands/cargo-new.html">cargo</a> to make a
+        new project.
     </div>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
         Or run <code>cargo new &lt;my-project&gt;</code>
     </div>
 </div>
-<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible">
-    <span>add http4r ⬇️</span>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>add http4r ➡️</span>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
-        Run <code>cargo install http4r</code> as described <a href="https://doc.rust-lang.org/cargo/commands/cargo-install.html">here</a>
+        Run <code>cargo install http4r</code> as described <a
+            href="https://doc.rust-lang.org/cargo/commands/cargo-install.html">here</a>
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        Or add <code>http4r = "0.0.0"</code> to your <code>Cargo.toml</code>
+    </div>
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>hello world ➡️</span>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        The most basic hello world example would be returning a 200 and "Hello, world!" to any request.
+    </div>
+    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-2/5 hidden sm:block">
+        <pre>
+            <code>
+fn main() {
+    // define handler
+    struct OkHandler;
+    // implement Handler
+    impl Handler for OkHandler {
+        fn handle&lt;F&gt;(&mut self, _req: Request, fun: F) -> ()
+            where F: FnOnce(Response) -> () + Sized {
+            // call our response callback function "fun" on a 200 OK
+            // with empty Headers and "Hello, world!" Body.
+            fun(Response::ok(Headers::empty(), BodyString("Hello, world!")));
+        }
+    }
+    // make a new server (0 means next available port to the OS)
+    let mut server = Server::new(0);
+    // start listening and use OkHandler to handle requests.
+    server.start(|| { Ok(OkHandler) }, false);
+}
+            </code>
+        </pre>
+    </div>
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>project setup ➡️</span>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        In case you are new to Rust, this is how I set up a project. You can take a look at the
+        <code>http4r-example-app</code> (which these docs are written with!) <a
+            href="https://github.com/TomShacham/http4r/tree/main/http4r-example-app">if you want a nicer view</a>.
+    </div>
+    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-2/5 hidden sm:block">
+        <img
     </div>
 </div>
