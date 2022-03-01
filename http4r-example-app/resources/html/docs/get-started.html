@@ -37,11 +37,16 @@
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>add http4r ➡️</span>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
-        Run <code>cargo install http4r</code> as described <a
-            href="https://doc.rust-lang.org/cargo/commands/cargo-install.html">here</a>
+        Run <code>cargo install http4r-core</code> as described <a
+            href="https://doc.rust-lang.org/cargo/commands/cargo-install.html">here</a>.
     </div>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
-        Or add <code>http4r = "0.0.0"</code> to your <code>Cargo.toml</code>
+        Or add <code>http4r-core = "0.0.0"</code> to your <code>Cargo.toml</code>
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        The core library provides the fundamental building blocks, and other libraries build on top of it. That way you
+        can have a small core library that doesn't bloat and you don't have to pull in lots of things just to build a
+        small web app.
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
@@ -54,9 +59,9 @@
             <code>
 fn main() {
     // define handler
-    struct OkHandler;
+    struct ok_handler;
     // implement Handler
-    impl Handler for OkHandler {
+    impl Handler for ok_handler {
         fn handle&lt;F&gt;(&mut self, _req: Request, fun: F) -> ()
             where F: FnOnce(Response) -> () + Sized {
             // call our response callback function "fun" on a 200 OK
@@ -66,8 +71,8 @@ fn main() {
     }
     // make a new server (0 means next available port to the OS)
     let mut server = Server::new(0);
-    // start listening and use OkHandler to handle requests.
-    server.start(|| { Ok(OkHandler) }, false);
+    // start listening and use ok_handler to handle requests.
+    server.start(|| { Ok(ok_handler) }, false);
 }
             </code>
         </pre>
@@ -81,6 +86,106 @@ fn main() {
             href="https://github.com/TomShacham/http4r/tree/main/http4r-example-app">if you want a nicer view</a>.
     </div>
     <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-2/5 hidden sm:block">
-        <img
+        <img src="/images/project-structure.png" width="300px" height="auto"/>
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        The Rust language book has a <a
+            href="https://doc.rust-lang.org/book/ch07-01-packages-and-crates.html">chapter
+        on crates</a> explaining more about <code>lib.rs</code> and <a
+            href="https://doc.rust-lang.org/cargo/guide/project-layout.html">project setup</a> in general.
     </div>
 </div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>test-driving an app ➡️</span>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        Let's write a test file called <code>app_test.rs</code>. The below will not compile until we write our
+        ok_handler. But that's okay, we are driving the design with our test.
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        <pre><code>
+// app_test.rs
+
+#[cfg(test)]
+mod tests {
+    use http4r_core::client::Client;
+    use http4r_core::handler::Handler;
+    use http4r_core::headers::Headers;
+    use http4r_core::http_message::Request;
+    use http4r_core::http_message::Status::NotFound;
+    use http4r_core::server::Server;
+    use http4r_core::uri::Uri;
+
+    #[test]
+    fn not_found() {
+        let mut server = Server::new(0);
+        // start listening on next available port, close on finish = true
+        server.start(|| { Ok(ok_handler) }, true);
+
+        // request to some url we do not serve
+        let request = Request::get(Uri::parse("/not-found"), Headers::empty());
+
+        let mut client = Client::new("127.0.0.1", server.port, None);
+        // make an http request to our server and assert response status is Not Found.
+        client.handle(request, |res| {
+            assert_eq!(res.status, NotFound);
+        })
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        Now we need to write our <code>OkHandler</code>. Make a file in <code>src</code> called
+        <code>ok_handler.rs</code>.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        Add <code>pub mod ok_handler;</code> to <code>lib.rs</code> to include the file in our module tree.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        Now add the following code to <code>ok_handler.rs</code>:
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        <pre><code>
+// ok_handler.rs
+
+use http4r_core::handler::Handler;
+use http4r_core::headers::Headers;
+use http4r_core::http_message::{Request, Response};
+use http4r_core::http_message::Body::BodyString;
+
+pub struct OkHandler;
+impl Handler for OkHandler {
+    fn handle&lt;F&gt;(&mut self, _req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        fun(Response::not_found(Headers::empty(), BodyString("Not found.")));
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        And our test now passes!!! 🥳🥳🥳
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        Clearly, just returning <code>NotFound</code> does not really fit the bill of an <code>OkHandler</code> though.
+        So let's make it a bit more clever and work towards building a Router.
+    </div>
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>routing ➡️</span>
+
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>logging requests and responses ➡️</span>
+
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>approval testing ➡️</span>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        coming soon...
+    </div>
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>tracing ➡️</span>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        coming soon...
+    </div>
+</div>
+</body>

@@ -10,7 +10,6 @@ mod tests {
     use http4r_core::headers::Headers;
     use http4r_core::http_message::{body_string, Request, Response};
     use http4r_core::http_message::Body::{BodyStream, BodyString};
-    use http4r_core::logging_handler::{LoggingHttpHandler, RustLogger, WasmClock};
     use http4r_core::redirect_to_https_handler::RedirectToHttpsHandler;
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;

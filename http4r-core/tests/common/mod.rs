@@ -1,10 +1,15 @@
+use std::collections::HashMap;
 use std::io::Write;
 use std::net::TcpStream;
+use std::time::Instant;
+
 use http4r_core::handler::Handler;
 use http4r_core::headers::Headers;
 use http4r_core::http_message;
 use http4r_core::http_message::{Body, read_message_from_wire, Request, Response};
 use http4r_core::http_message::Body::BodyString;
+
+use crate::http_message::{Body, Request, Response};
 
 pub struct Router {}
 
@@ -89,5 +94,91 @@ impl Handler for MalformedChunkedEncodingClient {
         };
 
         fun(response)
+    }
+}
+
+pub struct LoggingHttpHandler<H, C, L> where H: Handler, C: Clock, L: Logger {
+    pub log: Vec<String>,
+    pub next_handler: H,
+    pub clock: C,
+    pub logger: L,
+}
+
+pub trait Clock {
+    fn now(&mut self) -> Instant;
+}
+
+pub trait Logger {
+    fn log(&mut self, line: &str);
+}
+
+
+pub struct RustLogger {}
+
+impl Logger for RustLogger {
+    fn log(&mut self, line: &str) {
+        println!("{}", line)
+    }
+}
+
+pub struct WasmClock {}
+
+impl Clock for WasmClock {
+    fn now(&mut self) -> Instant {
+        Instant::now()
+    }
+}
+
+impl<H, C, L> LoggingHttpHandler<H, C, L> where H: Handler, C: Clock, L: Logger {
+    pub fn new(logger: L, clock: C, next: H) -> LoggingHttpHandler<H, C, L> {
+        LoggingHttpHandler {
+            log: vec!(),
+            next_handler: next,
+            clock,
+            logger,
+        }
+    }
+}
+
+impl<H, C, L> Handler for LoggingHttpHandler<H, C, L> where H: Handler, C: Clock, L: Logger {
+    fn handle<F>(self: &mut LoggingHttpHandler<H, C, L>, req: Request, fun: F) -> ()
+        where F: FnOnce(Response) -> () + Sized {
+        let start = self.clock.now();
+        let req_string = format!("{} to {}", req.method.value().to_string(), req.uri);
+        self.next_handler.handle(req, |res| {
+            let status = res.status.to_string();
+            fun(res);
+            self.log.push(format!("{} => {} took {} μs", req_string, status, start.elapsed().as_micros()));
+            self.logger.log(format!("{}", self.log.join("\n")).as_str());
+        });
+    }
+}
+
+type Env = HashMap<String, String>;
+
+pub struct RedirectToHttpsHandler<H> where H: Handler {
+    next_handler: H,
+    env: Env,
+}
+
+impl<H> Handler for RedirectToHttpsHandler<H> where H: Handler {
+    fn handle<'a, F>(self: &mut RedirectToHttpsHandler<H>, req: Request<'a>, fun: F) -> ()
+        where F: FnOnce(Response) -> () + Sized {
+        if self.env.get("environment") == Some(&"production".to_string()) && req.uri.scheme != Some("https") {
+            let redirect = Response::moved_permanently(
+                Headers::from(vec!(("Location", req.uri.with_scheme("https").to_string().as_str()))),
+                Body::empty());
+            return fun(redirect);
+        }
+        self.next_handler.handle(req, fun);
+    }
+}
+
+impl<H> RedirectToHttpsHandler<H> where H: Handler {
+    pub fn new(handler: H, env: Env) -> RedirectToHttpsHandler<H> {
+        RedirectToHttpsHandler {
+            next_handler: handler,
+            env,
+        }
     }
 }
