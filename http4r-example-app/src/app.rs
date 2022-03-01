@@ -30,7 +30,7 @@ impl<H> Handler for App<H> where H: Handler {
 impl<'a> App<NotFoundHandler<StaticFileHandler<'a>>> {
     pub fn in_memory(env: Environment) -> App<NotFoundHandler<StaticFileHandler<'a>>> {
         let env_name = env.get("ENV").unwrap_or("test".to_string());
-        App::new(NotFoundHandler::new(StaticFileHandler::new("./resources/html", env_name)), env)
+        App::new(NotFoundHandler::new(StaticFileHandler::new("/resources/html", env_name)), env)
     }
 
     pub fn production(env: Environment) -> App<LoggingHttpHandler<NotFoundHandler<StaticFileHandler<'a>>, WasmClock, RustLogger>> {

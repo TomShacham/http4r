@@ -24,8 +24,11 @@ impl<H> Handler for NotFoundHandler<H> where H: Handler {
             if res.status == NotFound || res.status == Forbidden {
                 let result = canonicalize("/resources/html/not-found.html");
                 if result.is_err() {
-                    fun(Response::not_found(Headers::empty(), BodyString("Not found.")));
-                    return
+                    let not_found_html = fs::read_to_string(
+                        canonicalize("./resources/html/not-found.html").unwrap().to_str().unwrap()
+                    );
+                    fun(Response::not_found(Headers::empty(), BodyString(not_found_html.unwrap().as_str())));
+                    return;
                 }
                 let canonical = result.unwrap();
                 println!("opening {}", canonical.to_str().unwrap());

@@ -34,26 +34,15 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program (see COPYING).  If not, see <https://www.gnu.org/licenses/>.
 
-## Contributing
-
-### I'm new to Rust or I'm a bit rusty
-
-Go to https://www.rust-lang.org/tools/install to install `rustup`.
-
-`rustup` to update your rust and cargo version.
-
-Open the project in CLion and Salisbury's your Uncle.
-
 ## Todos
 
 - example app
   - local webpage that loads in wasm app and runs tests
     - JSON body parser
     - read and write to database
+    - checkout edge workers
     - reach out to some 3rd party api
     - do some basic auth or cookie thing
-      - checkout edge workers
-
 
 --- 
 - build pipeline
@@ -61,7 +50,7 @@ Open the project in CLion and Salisbury's your Uncle.
 - core api
   - use threadpool ?
   - sort the docs out so they dont generate docs for libs
-  - just generate docs in build pipeline, not committed to git
+    - just generate docs in build pipeline, not committed to git
   - todos in http_test eg set-cookie [header special case](https://datatracker.ietf.org/doc/html/rfc6265)
   - support multipart form data and application url form encoded 
   - limits on headers and body etc tests // sort out these vecs that are being allocated
@@ -86,5 +75,6 @@ Docs coming soon
 
 - philosophy of having recipes instead of providing library code or frameworks
 - set content-encoding to none in order to override default browser accept-encoding dictating content type
+- Body types, string vs stream and a diagram of the underlying model of streaming 
 
 

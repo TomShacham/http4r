@@ -19,10 +19,11 @@ fn make_approval_file(actual: &String, expected_file: &str) {
         let split = name.to_string().split(".").map(|x| x.to_string()).collect::<Vec<String>>();
         (split.get(0).unwrap().to_owned(), split.get(1).unwrap().to_owned())
     }).unwrap_or(("unknown_file_name".to_string(), "unknown_extension".to_string()));
-    let approval_output_file_name = name_and_extension.0 + "_approval" + "." + name_and_extension.1.as_str();
-    let create = File::create(up_to_file_name.clone() + "/" + approval_output_file_name.clone().as_str());
+    let approval_output_file_name = name_and_extension.0 + ".approval" + "." + name_and_extension.1.as_str();
+    let approval_file_full_path = up_to_file_name.clone() + "/" + approval_output_file_name.clone().as_str();
+    let create = File::create(approval_file_full_path.clone());
     if create.is_err() {
-        panic!("{}", format!("Failed to create approval file named: {}", up_to_file_name.clone() + "/" + approval_output_file_name.clone().as_str()));
+        panic!("{}", format!("Failed to create approval file named: {}", &approval_file_full_path));
     }
-    create.unwrap().write_all(actual.as_bytes());
+    create.unwrap().write_all(actual.as_bytes()).unwrap();
 }
