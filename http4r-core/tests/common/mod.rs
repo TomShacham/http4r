@@ -9,7 +9,6 @@ use http4r_core::http_message;
 use http4r_core::http_message::{Body, read_message_from_wire, Request, Response};
 use http4r_core::http_message::Body::BodyString;
 
-use crate::http_message::{Body, Request, Response};
 
 pub struct Router {}
 
