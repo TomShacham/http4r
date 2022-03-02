@@ -98,6 +98,10 @@ fn main() {
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>test-driving an app ➡️</span>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        We're going to write a little app that we drive through tests. Part of the fun of having a really simple "server
+        as a function" implementation is that we can really easily write a Handler and start it up as a server.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
         Let's write a test file called <code>app_test.rs</code>. The below will not compile until we write our
         ok_handler. But that's okay, we are driving the design with our test.
     </div>
@@ -124,10 +128,12 @@ mod tests {
         // request to some url we do not serve
         let request = Request::get(Uri::parse("/not-found"), Headers::empty());
 
+        // make a client that points to localhost + whatever port our server started on.
         let mut client = Client::new("127.0.0.1", server.port, None);
         // make an http request to our server and assert response status is Not Found.
         client.handle(request, |res| {
             assert_eq!(res.status, NotFound);
+            assert_eq!(body_string(res.body), "Not found.");
         })
     }
 }
@@ -165,7 +171,56 @@ impl Handler for OkHandler {
     </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
         Clearly, just returning <code>NotFound</code> does not really fit the bill of an <code>OkHandler</code> though.
-        So let's make it a bit more clever and work towards building a Router.
+        So let's make it a bit more clever and work towards building a Router. First let's add to our test:
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        <pre><code>
+// app_test.rs
+// add the following lines to our test
+
+let ok_request = Request::get(Uri::parse("/"), Headers::empty());
+// make a request to root that we expect to be ok
+client.handle(ok_request, |res| {
+    assert_eq!(res.status, OK);
+    assert_eq!(body_string(res.body), "Hello, world!");
+})
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        Then let's implement: we want our root url to return 200 OK.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        <pre><code>
+// ok_handler.rs
+// we are going to match on the request url
+// and return a different response if it's to the root
+
+use http4r_core::handler::Handler;
+use http4r_core::headers::Headers;
+use http4r_core::http_message::{Request, Response};
+use http4r_core::http_message::Body::BodyString;
+use http4r_core::uri::Uri;
+
+pub struct OkHandler;
+
+impl Handler for OkHandler {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        match req {
+            Request { uri: Uri { path: "/", .. }, .. } => {
+                fun(Response::ok(Headers::empty(), BodyString("Hello, world!")));
+            }
+            _ => {
+                fun(Response::not_found(Headers::empty(), BodyString("Not found.")));
+            }
+        }
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+        And there we have it! We have test-driven a very simple app. You may notice something quite cool, our test runs
+        in about 1ms! We can build up a test-suite of lots of functional tests like this and it won't take more than a
+        second or two to run them all!
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
@@ -175,6 +230,12 @@ impl Handler for OkHandler {
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>logging requests and responses ➡️</span>
 
+</div>
+<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
+    <span>deploying to heroku ➡️</span>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+        coming soon...
+    </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>approval testing ➡️</span>

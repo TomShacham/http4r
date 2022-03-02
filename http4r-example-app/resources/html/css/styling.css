@@ -42,7 +42,7 @@ a {
 }
 
 .collapsible {
-    max-height: 2000px;
+    max-height: 20000px;
     overflow: visible;
     opacity: 1;
 }
