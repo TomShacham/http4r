@@ -8,8 +8,6 @@ use http4r_core::http_message::{body_string, HttpVersion, Method, one_pt_one, Re
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::uri::Uri;
 use std::time::Instant;
-use crate::handler::Handler;
-use crate::http_message::{Request, Response};
 use crate::router::Router;
 
 #[wasm_bindgen]
