@@ -13,21 +13,20 @@
 <body>
 <div class="flex full-width justify-between bg-colour p-4 sm:p-8 font text-xs sm:text-base">
     <div><a href="/" class="font text-lg no-underline">http4r</a> </div>
-    <div></div>
-    <div class="flex space-around sm:w-1/3 w-4/5 justify-around">
+    <div class="flex space-around sm:w-1/3 w-4/5 justify-around items-center">
         <div><a href="/docs/get-started" class="font no-underline">Get started</a></div>
-        <div class="ml-4"><a href="/docs/recipes" class="font no-underline">Recipes</a></div>
+        <div class="ml-2"><a href="/docs/recipes" class="font no-underline">Recipes</a></div>
     </div>
 </div>
-<div class="flex p-4 sm:p-10 items-center flex-col">
-    <div class="doc-font block mb-10 w-9/10">
+<div class="flex p-4 sm:p-10 sm:pl-20 flex-col">
+    <div class="doc-font block mb-10 w-9/10 sm:w-4/5">
         <a href="/">http4r</a> is a web toolkit based on <a href="https://www.http4k.org">http4k</a> and <a
             href="https://github.com/http4t/http4t">http4t</a>,
         which in turn draws on work by <a href="https://www.github.com/bodar">Dan</a> and his <a
             href="https://www.github.com/bodar/utterlyidle">UtterlyIdle</a>
         web framework.
     </div>
-    <div class="doc-font block w-9/10">
+    <div class="doc-font block w-9/10 sm:w-4/5">
         <div class="mb-4">The main benefits of http4r over other web frameworks:</div>
         <ul>
             <li class="mb-4"><b class="text-base">1</b> Simple "server as a function" means you can unit test your App. It's just a Struct that implements Handler.
@@ -50,22 +49,22 @@
         </ul>
     </div>
 </div>
-<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center">
-    <div class="block w-9/10">
+<div class="flex sm:pl-20 bg-colour font p-4 sm:p-8 flex-col">
+    <div class="block w-9/10 sm:w-4/5">
         <div class="mb-4">At the heart of the library is the Handler trait.</div>
         <div class="mb-4">It takes a Request and a function taking a Response:</div>
     </div>
 </div>
-<div class="flex justify-center p-4">
-    <pre class="text-xs w-4/5 rust"><code>
+<div class="flex sm:pl-20 overflow-scroll p-4">
+    <pre class="text-xs rust"><code>
 trait Handler {
     fn handle&lt;F&gt;(&amp;mut self, req: Request, fun: F) -&gt; ()
     where F: FnOnce(Response) -&gt; () + Sized;
 }
     </code></pre>
 </div>
-<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center">
-    <div class="block w-9/10">
+<div class="flex sm:pl-20 bg-colour font p-4 sm:p-8 flex-col ">
+    <div class="block w-9/10 sm:w-4/5">
         <div class="mb-4">This allows us to compose Handlers so that extending the core functionality of http4r is
             easy.
         </div>
@@ -75,8 +74,8 @@ trait Handler {
         <div class="mb-4">implement the handler trait, catch any 404s and return a custom Response (see below)</div>
     </div>
 </div>
-<div class="flex justify-center p-4">
-    <pre class="w-4/5 text-xs rust"><code>
+<div class="flex sm:pl-20 overflow-scroll p-4">
+    <pre class="text-xs rust"><code>
 fn main() {
     //our NotFoundHandler takes in the next handler to delegate to, in this case, a StaticFileHandler
     NotFoundHandler::new(StaticFileHandler::new("./resources/html"))
@@ -95,14 +94,14 @@ impl&lt;H&gt; Handler for NotFoundHandler&lt;H&gt; where H: Handler {
 }
     </code></pre>
 </div>
-<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center">
-    <div class="block w-9/10">
+<div class="flex sm:pl-20 bg-colour font p-4 sm:p-8 flex-col ">
+    <div class="block w-9/10 sm:w-4/5">
         <div class="mb-4">We can easily test the above because it's just a Struct implementing Handler.</div>
         <div class="mb-4">We can write an "in-memory" test like this:</div>
     </div>
 </div>
-<div class="flex justify-center p-4">
-    <pre class="w-4/5 text-xs rust"><code>
+<div class="flex sm:pl-20 overflow-scroll p-4">
+    <pre class="text-xs rust"><code>
 #[test]
 fn not_found() {
     let mut not_found_handler = NotFoundHandler::new(
@@ -117,13 +116,13 @@ fn not_found() {
 }
     </code></pre>
 </div>
-<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center hidden lg:flex">
-    <div class="block w-9/10">
+<div class="flex sm:pl-20 bg-colour font p-4 sm:p-8 flex-col">
+    <div class="block w-9/10 sm:w-4/5">
         <div class="mb-4">Or we can test it "over-the-wire" by starting a server:</div>
     </div>
 </div>
-<div class="flex justify-center p-4 ">
-    <pre class="w-4/5 text-xs rust"><code>
+<div class="flex sm:pl-20 p-4 overflow-scroll">
+    <pre class="text-xs rust"><code>
 #[test]
 fn not_found() {
     // start server on port 0 (finds next available port)
@@ -143,8 +142,8 @@ fn not_found() {
 }
     </code></pre>
 </div>
-<div class="flex bg-colour font p-4 sm:p-8 flex-col items-center">
-    <div class="block w-9/10">
+<div class="flex sm:pl-20 bg-colour font p-4 sm:p-8 flex-col ">
+    <div class="block w-9/10 sm:w-4/5">
         <div class="mb-4">And there we have it!</div>
         <div class="mb-4">Above you can see that:</div>
         <ul>
