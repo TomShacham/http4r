@@ -56,6 +56,7 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
   - limits on headers and body etc tests // sort out these vecs that are being allocated
   - default response headers, content-type, content-length, date
   - client to use Host header eg Dan's
+  - read timeouts
   - 
   - checkout browsix
   - do we want to drop connections in stream.incoming() or do we want to hang onto them for a while

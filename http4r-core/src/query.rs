@@ -3,18 +3,31 @@ pub struct Query {
     pub vec: Vec<QueryType>
 }
 
-
-impl Query {
-    pub fn empty() -> Query {
-        Query { vec: vec!() }
+impl From<&str> for Query {
+    fn from(str: &str) -> Self {
+        let mut query = Query::empty();
+        str.split("&").for_each(|q| {
+            let pair = q.split("=").collect::<Vec<&str>>();
+            let [key, value] = [pair[0], pair[1]];
+            query = query.add((key, value));
+        });
+        query
     }
+}
 
-    pub fn from(vec: Vec<(&str, &str)>) -> Query {
+impl From<Vec<(&str, &str)>> for Query {
+    fn from(vec: Vec<(&str, &str)>) -> Self {
         let mut new = Vec::with_capacity(vec.len());
         for q in vec {
             new.push((q.0.to_string(), q.1.to_string()))
         }
         Query { vec: new }
+    }
+}
+
+impl Query {
+    pub fn empty() -> Query {
+        Query { vec: vec!() }
     }
 
     pub fn get(self, by: &str) -> Option<String> {

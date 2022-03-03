@@ -1,6 +1,6 @@
 [package]
 name = "http4r-core"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Simple, synchronous, symmetric client and server as a function"

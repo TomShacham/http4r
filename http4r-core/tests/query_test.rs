@@ -1,6 +1,14 @@
 #[cfg(test)]
 mod tests {
     use http4r_core::query::Query;
+    use http4r_core::uri::Uri;
+
+    #[test]
+    fn from_query_string() {
+        let uri = Uri::parse("/?name=tom&name=ben&age=30");
+        let query = Query::from(uri.query.unwrap_or(""));
+        assert_eq!(query.get("name").unwrap(), "tom");
+    }
 
     #[test]
     fn get() {
