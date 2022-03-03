@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>http4r Example App</title>
+    <title>http4r - get started</title>
     <script src="/js/tailwind-3.0.18.js"></script>
     <script src="/js/highlight.min.js"></script>
     <script>hljs.highlightAll();</script>
@@ -233,7 +233,7 @@ impl Handler for OkHandler {
     <span>routing ➡️</span>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         Most web frameworks come with some kind of DSL around routing. However, we don't need to provide one, you can
-        easily write your own router by writing a Handler. Starting to see a pattern emerging here? :)
+        easily write your own router by writing a Handler.
     </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         A router simply looks at a request and decides what happens next based on the method, path and
@@ -308,7 +308,7 @@ impl Handler for Router {
                     captures.unwrap().get(1).unwrap().as_str()
                 } else { "tom" };
                 // default org to "no-org" if no query param for org
-                let org = Query::from(req.uri.query.unwrap_or(""))
+                let org = Query::from(req.uri.query)
                     .get("org")
                     .unwrap_or("no-org".to_string());
                 // default friends to "no friends" if no friend header
@@ -478,7 +478,7 @@ impl Handler for Router {
             Request { .. } if profile_regex.is_match(req.uri.path) => {
                 // regex to capture the path param
                 let captures = profile_regex.captures(req.uri.path);
-                // no need to default now we are match req.uri.path to our regex.
+                // no need to default now we are matching req.uri.path to our regex.
                 let name = captures.unwrap().get(1).unwrap().as_str();
                 // no need to default now we are forcing query parameter in first match
                 let org = Query::from(req.uri.query).get("org").unwrap();
@@ -517,7 +517,7 @@ impl Handler for Router {
 
 #[test]
 fn show_home_page() {
-    // a GET request with no "friend" header!
+    // a GET request to "/home"
     let request = Request::get(Uri::parse("/home"), Headers::empty());
     let mut router = Router::new();
     router.handle(request, |res| {
@@ -526,6 +526,10 @@ fn show_home_page() {
     });
 }
         </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        To implement this, we are going to make our Router handle the "/home" route. We are also going to delegate to
+        a ProfileRouter if the profile regex matches in order to make our code more modular.
     </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         <pre><code class="rust">
@@ -553,7 +557,7 @@ impl&lt;H&gt; Handler for Router&lt;H&gt; where H: Handler {
                 self.profile_router.handle(req, fun)
             }
             // serve the home page
-            Request { .. } if req.uri.path == "/home" => {
+            Request { uri: Uri { path: "/home", .. }, .. } => {
                 fun(Response::ok(Headers::empty(), BodyString("Home page.")))
             }
             // everything else is not found
@@ -564,7 +568,8 @@ impl&lt;H&gt; Handler for Router&lt;H&gt; where H: Handler {
         </code></pre>
     </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
-        And now our ProfileRouter is basically what we had before:
+        And now our ProfileRouter is basically what we had before, but we don't need to match on the profile_regex as
+        that is handled in the router before (that is delegating to this router):
     </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         <pre><code class="rust">
@@ -606,7 +611,8 @@ impl Handler for ProfileRouter {
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         And there we have a Router that delegates to another (Profile)Router. You can see how we can keep going with
         this approach to scale a lot of routing in a fairly manageable way. You can also see that you can do whatever
-        you want in terms of logic around routing <b class="text-lg">without any DSL!!</b> You have the power of the whole language and
+        you want in terms of logic around routing <b class="text-lg">without any DSL!!</b> You have the power of the
+        whole language and
         especially Rust's powerful match functionality to do all kinds of fancy tricks. Ps. I will leave the test for
         "not found" as an exercise for the reader :D
     </div>
@@ -623,7 +629,7 @@ impl&lt;H&gt; Handler for Router&lt;H&gt; where H: Handler {
             Request { uri: Uri { scheme: Some("http"), .. }, .. } => {
                 fun(Response::moved_permanently(
                     Headers::from(vec!(
-                        ("Location", format!("https://base-url/{}", req.uri.path).as_str()))),
+                        ("Location", req.uri.with_scheme("https").to_string().as_str()))),
                     BodyString("Ok!")));
             }
             // allow delete on this path
@@ -640,10 +646,6 @@ impl&lt;H&gt; Handler for Router&lt;H&gt; where H: Handler {
 }
         </code></pre>
     </div>
-</div>
-<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
-    <span>logging requests and responses ➡️</span>
-
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>deploying to heroku ➡️</span>

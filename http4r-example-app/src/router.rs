@@ -1,6 +1,6 @@
 use http4r_core::handler::Handler;
 use http4r_core::headers::Headers;
-use http4r_core::http_message::{Method, Request, Response};
+use http4r_core::http_message::{Request, Response};
 use http4r_core::http_message::Body::BodyString;
 use http4r_core::query::Query;
 use http4r_core::uri::Uri;
@@ -20,21 +20,13 @@ impl<H> Router<H> where H: Handler {
 
 impl<H> Handler for Router<H> where H: Handler {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        let profile_regex = Regex::new("/site/([^/]+)/profile").unwrap();
         match req {
-            // redirect http traffic
-            Request { uri: Uri { scheme: Some("http"), .. }, .. } => {
-                fun(Response::moved_permanently(
-                    Headers::from(vec!(
-                        ("Location", format!("https://base-url/{}", req.uri.path).as_str()))),
-                    BodyString("Ok!")));
+            Request { .. } if profile_regex.is_match(req.uri.path) => {
+                self.profile_router.handle(req, fun)
             }
-            // allow delete on this path
-            Request { method: Method::DELETE, uri: Uri { path: "/delete-is-ok", .. }, .. } => {
-                fun(Response::ok(Headers::empty(), BodyString("Ok!")));
-            }
-            // do not allow delete on any other path
-            Request { method: Method::DELETE, .. } => {
-                fun(Response::bad_request(Headers::empty(), BodyString("Naughty!")));
+            Request { uri: Uri { path: "/home", .. }, .. } => {
+                fun(Response::ok(Headers::empty(), BodyString("Home page.")))
             }
             _ => fun(Response::not_found(Headers::empty(), BodyString("Not found.")))
         }
@@ -58,7 +50,7 @@ impl Handler for ProfileRouter {
                     BodyString("Expected header \"friend\".")))
             }
             // we dont need to match the regex and path as that's done by the router before
-            Request { .. } => {
+            Request { .. }  => {
                 let captures = profile_regex.captures(req.uri.path);
                 let name = captures.unwrap().get(1).unwrap().as_str();
                 let org = Query::from(req.uri.query).get("org").unwrap();
