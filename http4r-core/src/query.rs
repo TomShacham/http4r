@@ -8,8 +8,10 @@ impl From<&str> for Query {
         let mut query = Query::empty();
         str.split("&").for_each(|q| {
             let pair = q.split("=").collect::<Vec<&str>>();
-            let [key, value] = [pair[0], pair[1]];
-            query = query.add((key, value));
+            if pair.len() == 2 {
+                let [key, value] = [pair[0], pair[1]];
+                query = query.add((key, value));
+            }
         });
         query
     }

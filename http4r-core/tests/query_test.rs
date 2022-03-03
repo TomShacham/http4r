@@ -8,6 +8,10 @@ mod tests {
         let uri = Uri::parse("/?name=tom&name=ben&age=30");
         let query = Query::from(uri.query.unwrap_or(""));
         assert_eq!(query.get("name").unwrap(), "tom");
+
+        let no_query = Uri::parse("/");
+        let query = Query::from(no_query.query.unwrap_or(""));
+        assert_eq!(query.get("name"), None);
     }
 
     #[test]
