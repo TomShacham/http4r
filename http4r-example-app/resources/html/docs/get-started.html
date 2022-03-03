@@ -5,45 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>http4r Example App</title>
     <script src="/js/tailwind-3.0.18.js"></script>
-    <script src="/js/highlight.js"></script>
+    <script src="/js/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
     <script src="/js/collapse.js"></script>
     <link rel="stylesheet" href="/css/styling.css" type="text/css"/>
+    <link rel="stylesheet" href="/css/atom-one-light.min.css" type="text/css"/>
 </head>
 <body>
 <div class="flex full-width justify-between bg-colour p-4 sm:p-8 font text-xs sm:text-base">
     <div><a href="/" class="font text-lg no-underline">http4r</a></div>
     <div></div>
     <div class="flex space-around sm:w-1/3 w-1/2 justify-around">
-        <div class="hidden sm:block"><a href="/docs/get-started" class="font no-underline">Get started</a></div>
+        <div><a href="/docs/get-started" class="font no-underline">Get started</a></div>
         <div class="ml-4"><a href="/docs/recipes" class="font no-underline">Recipes</a></div>
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>installing Rust ➡️</span>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         Follow instructions from <a href="https://www.rust-lang.org/tools/install">rust-lang</a> to install rustup.
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>making a new project ➡️</span>
-    <div class="doc-font block mb-2 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-2 w-4/5 md:w-2/3 2xl:w-3/5">
         Follow instructions about <a href="https://doc.rust-lang.org/cargo/commands/cargo-new.html">cargo</a> to make a
         new project.
     </div>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
-        Or run <code>cargo new &lt;my-project&gt;</code>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        Or run <code class="rust">cargo new &lt;my-project&gt;</code>
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>add http4r ➡️</span>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
-        Run <code>cargo install http4r-core</code> as described <a
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        Run <code class="rust">cargo install http4r-core</code> as described <a
             href="https://doc.rust-lang.org/cargo/commands/cargo-install.html">here</a>.
     </div>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
-        Or add <code>http4r-core = "0.0.0"</code> to your <code>Cargo.toml</code>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        Or add <code class="rust">http4r-core = "0.0.0"</code> to your <code class="rust">Cargo.toml</code>
     </div>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         The core library provides the fundamental building blocks, and other libraries build on top of it. That way you
         can have a small core library that doesn't bloat and you don't have to pull in lots of things just to build a
         small web app.
@@ -51,12 +53,12 @@
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>hello world ➡️</span>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         The most basic hello world example would be returning a 200 and "Hello, world!" to any request.
     </div>
-    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-2/5 hidden sm:block">
+    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-3/5 hidden sm:block">
         <pre>
-            <code>
+            <code class="rust">
 fn main() {
     // define handler
     struct ok_handler;
@@ -80,33 +82,34 @@ fn main() {
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>project setup ➡️</span>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         In case you are new to Rust, this is how I set up a project. You can take a look at the
-        <code>http4r-example-app</code> (which these docs are written with!) <a
+        <code class="rust">http4r-example-app</code> (which these docs are written with!) <a
             href="https://github.com/TomShacham/http4r/tree/main/http4r-example-app">if you want a nicer view</a>.
     </div>
-    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-2/5 hidden sm:block">
+    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-3/5 hidden sm:block">
         <img src="/images/project-structure.png" width="300px" height="auto"/>
     </div>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         The Rust language book has a <a
             href="https://doc.rust-lang.org/book/ch07-01-packages-and-crates.html">chapter
-        on crates</a> explaining more about <code>lib.rs</code> and <a
+        on crates</a> explaining more about <code class="rust">lib.rs</code> and <a
             href="https://doc.rust-lang.org/cargo/guide/project-layout.html">project setup</a> in general.
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>test-driving an app ➡️</span>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         We're going to write a little app that we drive through tests. Part of the fun of having a really simple "server
         as a function" implementation is that we can really easily write a Handler and start it up as a server.
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        Let's write a test file called <code>app_test.rs</code>. The below will not compile until we write our
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Let's write a test file called <code class="rust">app_test.rs</code>. The below will not compile until we write
+        our
         ok_handler. But that's okay, we are driving the design with our test.
     </div>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
-        <pre><code>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
 // app_test.rs
 
 #[cfg(test)]
@@ -139,18 +142,20 @@ mod tests {
 }
         </code></pre>
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        Now we need to write our <code>OkHandler</code>. Make a file in <code>src</code> called
-        <code>ok_handler.rs</code>.
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Now we need to write our <code class="rust">OkHandler</code>. Make a file in <code class="rust">src</code>
+        called
+        <code class="rust">ok_handler.rs</code>.
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        Add <code>pub mod ok_handler;</code> to <code>lib.rs</code> to include the file in our module tree.
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Add <code class="rust">pub mod ok_handler;</code> to <code class="rust">lib.rs</code> to include the file in our
+        module tree.
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        Now add the following code to <code>ok_handler.rs</code>:
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Now add the following code to <code class="rust">ok_handler.rs</code>:
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        <pre><code>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
 // ok_handler.rs
 
 use http4r_core::handler::Handler;
@@ -166,15 +171,16 @@ impl Handler for OkHandler {
 }
         </code></pre>
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         And our test now passes!!! 🥳🥳🥳
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        Clearly, just returning <code>NotFound</code> does not really fit the bill of an <code>OkHandler</code> though.
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Clearly, just returning <code class="rust">NotFound</code> does not really fit the bill of an <code
+            class="rust">OkHandler</code> though.
         So let's make it a bit more clever and work towards building a Router. First let's add to our test:
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        <pre><code>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
 // app_test.rs
 // add the following lines to our test
 
@@ -186,11 +192,11 @@ client.handle(ok_request, |res| {
 })
         </code></pre>
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         Then let's implement: we want our root url to return 200 OK.
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
-        <pre><code>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
 // ok_handler.rs
 // we are going to match on the request url
 // and return a different response if it's to the root
@@ -217,7 +223,7 @@ impl Handler for OkHandler {
 }
         </code></pre>
     </div>
-    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         And there we have it! We have test-driven a very simple app. You may notice something quite cool, our test runs
         in about 1ms! We can build up a test-suite of lots of functional tests like this and it won't take more than a
         second or two to run them all!
@@ -225,7 +231,415 @@ impl Handler for OkHandler {
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>routing ➡️</span>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Most web frameworks come with some kind of DSL around routing. However, we don't need to provide one, you can
+        easily write your own router by writing a Handler. Starting to see a pattern emerging here? :)
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        A router simply looks at a request and decides what happens next based on the method, path and
+        maybe the headers and query parameters. So let's have a go at that. Again, we will test-drive it.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+// router_test.rs
+// this time we are testing in-memory rather than over HTTP.
 
+#[cfg(test)]
+mod tests {
+    use http4r_core::handler::Handler;
+    use http4r_core::headers::Headers;
+    use http4r_core::http_message::{body_string, Request};
+    use http4r_core::http_message::Status::{OK};
+    use http4r_core::uri::Uri;
+
+    use http4r_example_app::router::Router;
+
+    #[test]
+    fn router() {
+        // a GET request with path param "Bob", query param "org" and headers
+        let request = Request::get(
+            Uri::parse("/site/Bob/profile?org=Uncle"),
+            Headers::from(vec!(("friend", "Vic"), ("friend", "Ulrika"))));
+        let mut router = Router::new();
+        // router is also a Handler so we can just handle a request directly
+        // "in-memory" rather than going over HTTP
+        router.handle(request, |res| {
+            assert_eq!(res.status, OK);
+            // response body has input from req
+            assert_eq!(body_string(res.body), "Uncle->Bob: Vic, Ulrika".to_string())
+        });
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Our first simple implementation to make this test pass will follow the happy path of taking out the path
+        parameter, query parameter and headers and return them in the response body. You'll need the <a
+            href="https://crates.io/crates/regex">regex crate</a> for this example.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+// router.rs
+
+use http4r_core::handler::Handler;
+use http4r_core::headers::Headers;
+use http4r_core::http_message::{Request, Response};
+use http4r_core::http_message::Body::BodyString;
+use http4r_core::query::Query;
+use http4r_core::uri::Uri;
+use regex::Regex;
+
+pub struct Router;
+impl Router {
+    pub fn new() -> Router {
+        Router {}
+    }
+}
+impl Handler for Router {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        match req {
+            // match all requests
+            Request { .. } => {
+                // regex to capture the path param
+                let profile_regex = Regex::new("/site/([^/]+)/profile");
+                let captures = profile_regex.unwrap().captures(req.uri.path);
+                // default name to tom if regex doesn't match
+                let name = if captures.is_some() {
+                    captures.unwrap().get(1).unwrap().as_str()
+                } else { "tom" };
+                // default org to "no-org" if no query param for org
+                let org = Query::from(req.uri.query.unwrap_or(""))
+                    .get("org")
+                    .unwrap_or("no-org".to_string());
+                // default friends to "no friends" if no friend header
+                let friends = req.headers.get("friend")
+                    .unwrap_or("no friends".to_string());
+
+                // return formatted in response body
+                fun(Response::ok(
+                    Headers::empty(),
+                    BodyString(format!("{}->{}: {}", org, name, friends).as_str())));
+            }
+        }
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Our test now passes! 🥳🥳🥳
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        However, our code is already getting to be a bit messy. Let's tidy it up a bit. We are going to match on the
+        profile path regex before entering the matching block, so that we know that we will have a path param captured:
+    </div>
+    <pre><code class="rust">
+// router.rs
+
+impl Handler for Router {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        // move regex up out of match statement
+        let profile_regex = Regex::new("/site/([^/]+)/profile").unwrap();
+        match req {
+            // check that the path matches our regex first
+            Request { .. } if profile_regex.is_match(req.uri.path) => {
+                let captures = profile_regex.captures(req.uri.path);
+                // no need to default now that we match req.uri.path to our regex.
+                // because we know it will capture something
+                let name = captures.unwrap().get(1).unwrap().as_str();
+                // still defaulting org
+                let org = Query::from(req.uri.query)
+                    .get("org")
+                    .unwrap_or("no-org".to_string());
+                // still defaulting friends
+                let friends = req.headers.get("friend")
+                    .unwrap_or("no friends".to_string());
+
+                // return formatted in response body
+                fun(Response::ok(
+                    Headers::empty(),
+                    BodyString(format!("{}->{}: {}", org, name, friends).as_str())));
+            }
+            // now we need to provide a matcher for "everything else"
+            _ => fun(Response::not_found(Headers::empty(), BodyString("Not found.")))
+        }
+    }
+}
+        </code></pre>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Now that's a little better. We've also added a "Not found" clause for any request that doesn't match what we
+        were expecting. We haven't got a test for this yet, but we will get there soon.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Let's continue simplifying. Let's add another test that says that we have to have an "org" query parameter or
+        else we will not be happy.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+// router_test.rs
+
+#[test]
+fn router_disallows_requests_with_no_org() {
+    // a GET request with no query param "org"!
+     let request = Request::get(
+        Uri::parse("/site/Bob/profile"),
+        Headers::from(vec!(("friend", "Vic"), ("friend", "Ulrika"))));
+    let mut router = Router::new();
+    router.handle(request, |res| {
+        // expect a bad request
+        assert_eq!(res.status, BadRequest);
+        assert_eq!(body_string(res.body), "Expected an \"org\" query parameter.".to_string())
+    });
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Let's implement it by first matching on requests with no "org" query parameter and returning a response.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+// router.rs
+
+impl Handler for Router {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        let profile_regex = Regex::new("/site/([^/]+)/profile").unwrap();
+        match req {
+            // first let's chuck out requests with no "org" query parameter
+            Request { .. } if Query::from(req.uri.query).get("org").is_none() => {
+                fun(Response::bad_request(
+                        Headers::empty(),
+                        BodyString("Expected query parameter \"org\".")))
+            }
+            Request { .. } if profile_regex.is_match(req.uri.path) => {
+                let captures = profile_regex.captures(req.uri.path);
+                let name = captures.unwrap().get(1).unwrap().as_str();
+                // no need to default now we are forcing query parameter in first match
+                let org = Query::from(req.uri.query).get("org").unwrap();
+                // still defaulting "friend" header
+                let friends = req.headers.get("friend")
+                    .unwrap_or("no friends".to_string());
+
+                // return formatted in response body
+                fun(Response::ok(
+                    Headers::empty(),
+                    BodyString(format!("{}->{}: {}", org, name, friends).as_str())));
+            }
+            _ => fun(Response::not_found(Headers::empty(), BodyString("Not found.")))
+        }
+    }
+}
+
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        That's a bit better. Let's go one step further now and mandate that we want the "friend" header too:
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+    <pre><code class="rust">
+// router_test.rs
+
+
+#[test]
+fn router_disallows_requests_with_no_friend() {
+    // a GET request with no "friend" header!
+    let request = Request::get(
+        Uri::parse("/site/Bob/profile?org=Uncle"),
+        Headers::empty());
+    let mut router = Router::new();
+    router.handle(request, |res| {
+        assert_eq!(res.status, BadRequest);
+        assert_eq!(body_string(res.body), "Expected header \"friend\".".to_string())
+    });
+}
+    </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        The above test now leads us to chuck out requests without the header we want as follows:
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+    <pre><code class="rust">
+// router.rs
+
+impl Handler for Router {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        let profile_regex = Regex::new("/site/([^/]+)/profile").unwrap();
+        match req {
+            // first let's chuck out requests with no "org" query parameter
+            Request { .. } if Query::from(req.uri.query).get("org").is_none() => {
+                fun(Response::bad_request(
+                    Headers::empty(),
+                    BodyString("Expected query parameter \"org\".")))
+            }
+            // next chuck out requests with no "friend" header
+            Request { .. } if req.headers.get("friend").is_none() => {
+                fun(Response::bad_request(
+                    Headers::empty(),
+                    BodyString("Expected header \"friend\".")))
+            }
+            Request { .. } if profile_regex.is_match(req.uri.path) => {
+                // regex to capture the path param
+                let captures = profile_regex.captures(req.uri.path);
+                // no need to default now we are match req.uri.path to our regex.
+                let name = captures.unwrap().get(1).unwrap().as_str();
+                // no need to default now we are forcing query parameter in first match
+                let org = Query::from(req.uri.query).get("org").unwrap();
+                // no need to default friend now either
+                let friends = req.headers.get("friend").unwrap();
+
+                // return formatted in response body
+                fun(Response::ok(
+                    Headers::empty(),
+                    BodyString(format!("{}->{}: {}", org, name, friends).as_str())));
+            }
+            _ => fun(Response::not_found(Headers::empty(), BodyString("Not found.")))
+        }
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Now our API makes a bit more sense. We are being strict about what we accept and we are returning meaningful
+        error messages to the client. We have also tidied up our happy path by not having to default parameters that
+        could have been missing on our first pass.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Clearly this example is somewhat contrived in order to demonstrate the possibilities in http4r. However, there
+        is one obvious problem here as a router: it requires that all our routes now have an "org" query and a "friend"
+        header or else they will be bad requests.
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        We could add <code class="rust">if profile_regex.is_match(req.uri.path)</code> to every match clause but we
+        could also use Handler composition and write a more generic router that will delegate to this one if needs be.
+        Let's add a test that we can serve some other route like "/home".
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+// router_test.rs
+
+#[test]
+fn show_home_page() {
+    // a GET request with no "friend" header!
+    let request = Request::get(Uri::parse("/home"), Headers::empty());
+    let mut router = Router::new();
+    router.handle(request, |res| {
+        assert_eq!(res.status, OK);
+        assert_eq!(body_string(res.body), "Home page.".to_string())
+    });
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+// router.rs
+
+pub struct Router&lt;H&gt; where H: Handler {
+    // now takes a profile router to delegate to
+    profile_router: H,
+}
+
+impl&lt;H&gt; Router&lt;H&gt; where H: Handler {
+    pub fn new(next: H) -> Router&lt;H&gt; {
+        Router {
+            profile_router: next
+        }
+    }
+}
+
+impl&lt;H&gt; Handler for Router&lt;H&gt; where H: Handler {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        let profile_regex = Regex::new("/site/([^/]+)/profile").unwrap();
+        match req {
+            // if the profile regex matches, then delegate to the profile router
+            Request { .. } if profile_regex.is_match(req.uri.path) => {
+                self.profile_router.handle(req, fun)
+            }
+            // serve the home page
+            Request { .. } if req.uri.path == "/home" => {
+                fun(Response::ok(Headers::empty(), BodyString("Home page.")))
+            }
+            // everything else is not found
+            _ => fun(Response::not_found(Headers::empty(), BodyString("Not found.")))
+        }
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        And now our ProfileRouter is basically what we had before:
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+// router.rs
+
+
+pub struct ProfileRouter;
+
+impl Handler for ProfileRouter {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        let profile_regex = Regex::new("/site/([^/]+)/profile").unwrap();
+        match req {
+            Request { .. } if Query::from(req.uri.query).get("org").is_none() => {
+                fun(Response::bad_request(
+                    Headers::empty(),
+                    BodyString("Expected query parameter \"org\".")))
+            }
+            Request { .. } if req.headers.get("friend").is_none() => {
+                fun(Response::bad_request(
+                    Headers::empty(),
+                    BodyString("Expected header \"friend\".")))
+            }
+            // we dont need to match the regex and path as that's done by the router before
+            Request { .. }  => {
+                let captures = profile_regex.captures(req.uri.path);
+                let name = captures.unwrap().get(1).unwrap().as_str();
+                let org = Query::from(req.uri.query).get("org").unwrap();
+                let friends = req.headers.get("friend").unwrap();
+                fun(Response::ok(
+                    Headers::empty(),
+                    BodyString(format!("{}->{}: {}", org, name, friends).as_str())));
+            }
+            // we don't need the not found case now, this is handled by the router before us
+        }
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        And there we have a Router that delegates to another (Profile)Router. You can see how we can keep going with
+        this approach to scale a lot of routing in a fairly manageable way. You can also see that you can do whatever
+        you want in terms of logic around routing <b class="text-lg">without any DSL!!</b> You have the power of the whole language and
+        especially Rust's powerful match functionality to do all kinds of fancy tricks. Ps. I will leave the test for
+        "not found" as an exercise for the reader :D
+    </div>
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        Here you can see how you can use destructuring in the match clause to do some nice things too:
+    </div>
+
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+impl&lt;H&gt; Handler for Router&lt;H&gt; where H: Handler {
+    fn handle&lt;F&gt;(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        match req {
+            // redirect http traffic
+            Request { uri: Uri { scheme: Some("http"), .. }, .. } => {
+                fun(Response::moved_permanently(
+                    Headers::from(vec!(
+                        ("Location", format!("https://base-url/{}", req.uri.path).as_str()))),
+                    BodyString("Ok!")));
+            }
+            // allow delete on this path
+            Request { method: Method::DELETE, uri: Uri { path: "/delete-is-ok", .. }, .. } => {
+                fun(Response::ok(Headers::empty(), BodyString("Ok!")));
+            }
+            // do not allow delete on any other path
+            Request { method: Method::DELETE, .. } => {
+                fun(Response::bad_request(Headers::empty(), BodyString("Naughty!")));
+            }
+            _ => fun(Response::not_found(Headers::empty(), BodyString("Not found.")))
+        }
+    }
+}
+        </code></pre>
+    </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>logging requests and responses ➡️</span>
@@ -233,19 +647,19 @@ impl Handler for OkHandler {
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>deploying to heroku ➡️</span>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         coming soon...
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>approval testing ➡️</span>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         coming soon...
     </div>
 </div>
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>tracing ➡️</span>
-    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-2/5">
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         coming soon...
     </div>
 </div>

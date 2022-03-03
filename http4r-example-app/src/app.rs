@@ -1,6 +1,5 @@
 use http4r_core::handler::Handler;
 use http4r_core::http_message::{Request, Response};
-use http4r_core::logging_handler::{LoggingHttpHandler, RustLogger, WasmClock};
 use crate::environment::Environment;
 use crate::not_found_handler::NotFoundHandler;
 use crate::static_file_handler::StaticFileHandler;
@@ -33,11 +32,9 @@ impl<'a> App<NotFoundHandler<StaticFileHandler<'a>>> {
         App::new(NotFoundHandler::new(StaticFileHandler::new("/resources/html", env_name)), env)
     }
 
-    pub fn production(env: Environment) -> App<LoggingHttpHandler<NotFoundHandler<StaticFileHandler<'a>>, WasmClock, RustLogger>> {
+    pub fn production(env: Environment) -> App<NotFoundHandler<StaticFileHandler<'a>>> {
         let env_name = env.get("ENV").unwrap_or("production".to_string());
-        App::new(LoggingHttpHandler::new(RustLogger {}, WasmClock {},
-                                         NotFoundHandler::new(
-                                             StaticFileHandler::new("/resources/html", env_name))), env)
+        App::new(NotFoundHandler::new(StaticFileHandler::new("/resources/html", env_name)), env)
     }
 }
 
