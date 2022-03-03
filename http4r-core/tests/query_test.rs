@@ -15,6 +15,17 @@ mod tests {
     }
 
     #[test]
+    fn from_option_of_string() {
+        let uri = Uri::parse("/?name=tom&name=ben&age=30");
+        let query = Query::from(uri.query);
+        assert_eq!(query.get("name").unwrap(), "tom");
+
+        let no_query = Uri::parse("/");
+        let query = Query::from(no_query.query);
+        assert_eq!(query.get("name"), None);
+    }
+
+    #[test]
     fn get() {
         assert_eq!(Query::empty().get("foo"), None);
         assert_eq!(Query::from(vec!(("foo", "bar"))).get("foo"), Some("bar".to_string()));

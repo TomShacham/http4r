@@ -17,6 +17,16 @@ impl From<&str> for Query {
     }
 }
 
+impl From<Option<&str>> for Query {
+    fn from(option: Option<&str>) -> Self {
+        if option.is_none() {
+            Query::empty()
+        } else {
+            Query::from(option.unwrap())
+        }
+    }
+}
+
 impl From<Vec<(&str, &str)>> for Query {
     fn from(vec: Vec<(&str, &str)>) -> Self {
         let mut new = Vec::with_capacity(vec.len());
