@@ -13,7 +13,7 @@
 </head>
 <body>
 <div class="flex full-width justify-between bg-colour p-4 sm:p-8 font text-xs sm:text-base">
-    <div><a href="/" class="font text-lg no-underline">http4r</a> </div>
+    <div><a href="/" class="font text-lg no-underline">http4r</a></div>
     <div class="flex space-around sm:w-1/3 w-4/5 justify-around items-center">
         <div><a href="/docs/get-started" class="font no-underline">Get started</a></div>
         <div class="ml-2"><a href="/docs/recipes" class="font no-underline">Recipes</a></div>
@@ -42,7 +42,7 @@
             href="https://doc.rust-lang.org/cargo/commands/cargo-install.html">here</a>.
     </div>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
-        Or add <code class="rust">http4r-core = "0.0.0"</code> to your <code class="rust">Cargo.toml</code>
+        Or add <code class="rust">http4r-core = "0.0.4"</code> to your <code class="rust">Cargo.toml</code>
     </div>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         The core library provides the fundamental building blocks, and other libraries build on top of it. That way you
@@ -55,14 +55,14 @@
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         The most basic hello world example would be returning a 200 and "Hello, world!" to any request.
     </div>
-    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-3/5 hidden sm:block">
+    <div class="doc-font mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         <pre>
             <code class="rust">
 fn main() {
     // define handler
-    struct ok_handler;
+    struct OkHandler;
     // implement Handler
-    impl Handler for ok_handler {
+    impl Handler for OkHandler {
         fn handle&lt;F&gt;(&mut self, _req: Request, fun: F) -> ()
             where F: FnOnce(Response) -> () + Sized {
             // call our response callback function "fun" on a 200 OK
@@ -72,8 +72,8 @@ fn main() {
     }
     // make a new server (0 means next available port to the OS)
     let mut server = Server::new(0);
-    // start listening and use ok_handler to handle requests.
-    server.start(|| { Ok(ok_handler) }, false);
+    // start listening and use OkHandler to handle requests.
+    server.start(|| { Ok(OkHandler) }, false);
 }
             </code>
         </pre>
@@ -100,12 +100,13 @@ fn main() {
     <span>test-driving an app ➡️</span>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         We're going to write a little app that we drive through tests. Part of the fun of having a really simple "server
-        as a function" implementation is that we can really easily write a Handler and start it up as a server.
+        as a function" implementation is that we can really easily write a Handler and test it "in-memory" or
+        "over-the-wire" by starting it up as a server.
     </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         Let's write a test file called <code class="rust">app_test.rs</code>. The below will not compile until we write
         our
-        ok_handler. But that's okay, we are driving the design with our test.
+        OkHandler. But that's okay, we are driving the design with our test.
     </div>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
         <pre><code class="rust">
@@ -125,7 +126,7 @@ mod tests {
     fn not_found() {
         let mut server = Server::new(0);
         // start listening on next available port, close on finish = true
-        server.start(|| { Ok(ok_handler) }, true);
+        server.start(|| { Ok(OkHandler) }, true);
 
         // request to some url we do not serve
         let request = Request::get(Uri::parse("/not-found"), Headers::empty());
@@ -331,7 +332,8 @@ impl Handler for Router {
         However, our code is already getting to be a bit messy. Let's tidy it up a bit. We are going to match on the
         profile path regex before entering the matching block, so that we know that we will have a path param captured:
     </div>
-    <pre><code class="rust">
+    <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
+      <pre><code class="rust">
 // router.rs
 
 impl Handler for Router {
@@ -364,6 +366,7 @@ impl Handler for Router {
     }
 }
         </code></pre>
+    </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
         Now that's a little better. We've also added a "Not found" clause for any request that doesn't match what we
         were expecting. We haven't got a test for this yet, but we will get there soon.
@@ -426,7 +429,6 @@ impl Handler for Router {
         }
     }
 }
-
         </code></pre>
     </div>
     <div class="doc-font block mb-5 w-4/5 md:w-2/3 2xl:w-3/5">
@@ -649,19 +651,53 @@ impl&lt;H&gt; Handler for Router&lt;H&gt; where H: Handler {
 <div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
     <span>deploying to heroku ➡️</span>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
-        coming soon...
+        Deploying to Heroku has been made very easy with the emk/rust buildpack.
     </div>
-</div>
-<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
-    <span>approval testing ➡️</span>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
-        coming soon...
+        <pre><code class="bash">heroku buildpacks:set emk/rust</code></pre>
     </div>
-</div>
-<div class="flex flex-col items-center px-4 py-2 sm:px-10 sm:pt-8 collapsible collapsed">
-    <span>tracing ➡️</span>
     <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
-        coming soon...
+        Now we need a Procfile. The Procfile tells Heroku what command runs our program and what kind of process we are
+        running ("web").
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="bash">web: ./target/release/[your app name]</code></pre>
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        Here is our main function that starts a Server and binds to the PORT env variable:
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        <pre><code class="rust">
+use std::env;
+use http4r_core::handler::Handler;
+use http4r_core::headers::Headers;
+use http4r_core::http_message::{Request, Response};
+use http4r_core::http_message::Body::BodyString;
+use http4r_core::server::Server;
+
+fn main() {
+    let mut env_vars = env::vars();
+    let port = env_vars
+        .find(|it| it.0 == "PORT")
+        .map(|it| it.1.parse().unwrap_or(0))
+        .unwrap_or(0);
+
+    let mut server = Server::new(port);
+    server.start(move || { Ok(OkHandler) }, false);
+}
+
+
+pub struct OkHandler;
+impl Handler for OkHandler {
+    fn handle&lt;F&gt;(&mut self, _req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
+        fun(Response::ok(Headers::empty(), BodyString("hello, world!")));
+    }
+}
+        </code></pre>
+    </div>
+    <div class="doc-font block mb-10 w-4/5 md:w-2/3 2xl:w-3/5">
+        And there we have it. If you don't know how to deploy you can follow <a
+            href="https://devcenter.heroku.com/articles/git"> Heroku's instructions</a>
     </div>
 </div>
 </body>
