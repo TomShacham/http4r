@@ -605,7 +605,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                     if chunked_encoding_desired && is_version_1_1 {
                         write_chunked_string(stream, start_line_and_headers, str.as_bytes(), req.trailers, compression);
                     } else {
-                        write_compressed_string(stream, &compression, start_line_and_headers, str, headers, start_line)
+                        write_string(stream, &compression, start_line_and_headers, str, headers, start_line)
                     }
                 }
                 BodyStream(ref mut reader) => {
@@ -680,7 +680,7 @@ pub fn write_message_to_wire(mut stream: &mut TcpStream, message: HttpMessage, r
                     if chunked_encoding_desired && (res.version == one_pt_one()) {
                         write_chunked_string(stream, status_and_headers, str.as_bytes(), trailers, compression);
                     } else {
-                        write_compressed_string(stream, &compression, status_and_headers, str, headers, start_line)
+                        write_string(stream, &compression, status_and_headers, str, headers, start_line)
                     }
                 }
                 BodyStream(ref mut reader) => {
@@ -720,7 +720,7 @@ fn set_connection_header_if_needed_and_not_present(headers: Headers, chunked_enc
     }
 }
 
-fn write_compressed_string(stream: &mut TcpStream, compression: &CompressionAlgorithm, start_line_and_headers: String, body: &str, headers: Headers, start_line: String) {
+fn write_string(stream: &mut TcpStream, compression: &CompressionAlgorithm, start_line_and_headers: String, body: &str, headers: Headers, start_line: String) {
     if compression.is_none() {
         let status_headers_and_body = [start_line_and_headers.as_bytes(), body.as_bytes()].concat();
         stream.write(status_headers_and_body.as_slice()).unwrap();
