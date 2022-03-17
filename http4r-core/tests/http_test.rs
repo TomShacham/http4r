@@ -24,7 +24,7 @@ mod tests {
 
         client.handle(request, |response: Response| {
             assert_eq!("OK", response.status.to_string());
-            assert_eq!("Content-Length: 0", response.headers.to_wire_string());
+            assert_eq!(format!("Host: 127.0.0.1:{}\r\nContent-Length: 0", server.port), response.headers.to_wire_string());
             assert_eq!("".to_string(), body_string(response.body));
         });
     }
@@ -49,7 +49,7 @@ mod tests {
                     assert_eq!(20000, string.len());
                     assert_eq!(string, long_string.to_string());
                     assert_eq!("OK", response.status.to_string());
-                    assert_eq!("Content-Length: 20000", response.headers.to_wire_string());
+                    assert_eq!(format!("Content-Length: 20000\r\nHost: 127.0.0.1:{}", server.port), response.headers.to_wire_string());
                 }
             }
         });
@@ -64,7 +64,7 @@ mod tests {
 
         client.handle(no_headers, |response: Response| {
             assert_eq!("OK", response.status.to_string());
-            assert_eq!("Content-Length: 0", response.headers.to_wire_string());
+            assert_eq!(format!("Host: 127.0.0.1:{}\r\nContent-Length: 0", server.port), response.headers.to_wire_string());
             assert_eq!("".to_string(), body_string(response.body));
         });
     }

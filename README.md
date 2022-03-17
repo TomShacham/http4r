@@ -45,6 +45,8 @@ along with this program (see COPYING).  If not, see <https://www.gnu.org/license
     - do some basic auth or cookie thing
 
 --- 
+- request takes an into string thing rather than Uri
+- client convenient method of get post etc
 - build pipeline
 - do not rely on nightly otherwise clients have to use it too
 - core api

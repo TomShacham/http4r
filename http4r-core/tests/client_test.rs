@@ -7,6 +7,7 @@ mod tests {
     use http4r_core::headers::Headers;
     use http4r_core::http_message::{body_string, Request};
     use http4r_core::http_message::Body::BodyString;
+    use http4r_core::http_message::Status::OK;
     use http4r_core::server::Server;
     use http4r_core::uri::Uri;
 
@@ -24,20 +25,30 @@ mod tests {
         // no Connection header
         let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked")));
         client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
-            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked")
+            assert_eq!(body_string(res.body), format!("TE: trailers\r\nTransfer-Encoding: chunked\r\nHost: 127.0.0.1:{}", server.port))
         });
 
         // already set connection header but without TE
         let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked"), ("Connection", "close")));
         client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
-            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: close, TE")
+            assert_eq!(body_string(res.body), format!("TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: close, TE\r\nHost: 127.0.0.1:{}", server.port))
         });
 
         // set connection header with TE keeps it intact
         let headers = Headers::from(vec!(("TE", "trailers"), ("Transfer-Encoding", "chunked"), ("Connection", "TE")));
         client.handle(Request::post(Uri::parse("/"), headers, BodyString("Some body")), |res| {
-            assert_eq!(body_string(res.body), "TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: TE")
+            assert_eq!(body_string(res.body), format!("TE: trailers\r\nTransfer-Encoding: chunked\r\nConnection: TE\r\nHost: 127.0.0.1:{}", server.port))
         })
+    }
+
+    #[test]
+    fn can_connect_to_external_site_ie_sets_host_header() {
+        let mut client = Client::new("httpbin.org", 80, None);
+
+        let req = Request::get(Uri::parse("/get"), Headers::empty());
+        client.handle(req, |res| {
+            assert_eq!(res.status, OK);
+        });
     }
 
     //todo() test that the client will do a chunked transfer encoding if we dont have content length

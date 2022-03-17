@@ -30,7 +30,7 @@ mod tests {
             client.handle(should_ignore_body, |response: Response| {
                 assert_eq!("OK", response.status.to_string());
                 assert_eq!("".to_string(), body_string(response.body));
-                assert_eq!("Content-Length: 0", response.headers.to_wire_string());
+                assert_eq!(format!("Content-Length: 0\r\nHost: 127.0.0.1:{}", server.port), response.headers.to_wire_string());
             });
         }
     }

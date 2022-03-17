@@ -41,7 +41,10 @@ mod tests {
         client.handle(big_chunked_request, |response: Response| {
             assert_eq!(little_string, body_string(response.body));
             assert_eq!(OK, response.status);
-            assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
+            assert_eq!(vec!(
+                ("Transfer-Encoding".to_string(), "chunked".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port))
+            ), response.headers.vec);
         });
     }
 
@@ -62,7 +65,10 @@ mod tests {
         client.handle(big_chunked_request, |response: Response| {
             assert_eq!(long_string, body_string(response.body));
             assert_eq!(OK, response.status);
-            assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
+            assert_eq!(vec!(
+                ("Transfer-Encoding".to_string(), "chunked".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port))
+            ), response.headers.vec);
         });
     }
 
@@ -82,7 +88,10 @@ mod tests {
         client.handle(big_chunked_request, |response: Response| {
             assert_eq!(OK, response.status);
             assert_eq!(with_encoding, body_string(response.body));
-            assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
+            assert_eq!(vec!(
+                ("Transfer-Encoding".to_string(), "chunked".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port)),
+            ), response.headers.vec);
         });
     }
 
@@ -127,6 +136,7 @@ mod tests {
                 ("Integrity".to_string(), "Some hash".to_string()),
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires, Integrity".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port))
             ), response.headers.vec);
         });
     }
@@ -189,6 +199,7 @@ When a chunked message containing a non-empty trailer is received,
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()), // valid trailer gets added to header
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires, Transfer-Encoding, Content-Length, Cache-Control, Max-Forwards, TE, Authorization, Set-Cookie, Content-Encoding, Content-Type, Content-Range".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port)),
             ), response.headers.vec);
         });
     }
@@ -235,6 +246,7 @@ When a chunked message containing a non-empty trailer is received,
                 ("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string()),
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port))
             ), response.headers.vec);
         });
 
@@ -260,6 +272,7 @@ When a chunked message containing a non-empty trailer is received,
                 //Expires should be in trailers
                 ("Transfer-Encoding".to_string(), "chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port))
                 // TE trailer should be removed
             ), response.headers.vec);
         });
@@ -346,6 +359,7 @@ When a chunked message containing a non-empty trailer is received,
             assert_eq!(vec!(
                 ("Transfer-Encoding".to_string(), "gzip, chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port)),
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
                        response.trailers.vec);
@@ -370,6 +384,7 @@ When a chunked message containing a non-empty trailer is received,
             assert_eq!(vec!(
                 ("Transfer-Encoding".to_string(), "deflate, chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port)),
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
                        response.trailers.vec);
@@ -394,6 +409,7 @@ When a chunked message containing a non-empty trailer is received,
             assert_eq!(vec!(
                 ("Transfer-Encoding".to_string(), "brotli, chunked".to_string()),
                 ("Trailer".to_string(), "Expires".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port))
                 // TE header does not get echoed back in response
             ), response.headers.vec);
             assert_eq!(vec!(("Expires".to_string(), "Wed, 21 Oct 2015 07:28:00 GMT".to_string())),
@@ -464,7 +480,10 @@ When a chunked message containing a non-empty trailer is received,
         client.handle(big_chunked_request, |response: Response| {
             assert_eq!(string1, body_string(response.body));
             assert_eq!(OK, response.status);
-            assert_eq!(vec!(("Transfer-Encoding".to_string(), "chunked".to_string())), response.headers.vec);
+            assert_eq!(vec!(
+                ("Transfer-Encoding".to_string(), "chunked".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port))
+            ), response.headers.vec);
         });
     }
 

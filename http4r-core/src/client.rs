@@ -24,9 +24,10 @@ impl Handler for Client {
     fn handle<F>(self: &mut Client, req: Request, fun: F) -> ()
         where F: FnOnce(Response) -> () + Sized {
         let uri = format!("{}:{}", self.base_uri, self.port);
-        let mut stream = TcpStream::connect(uri).unwrap();
+        let mut stream = TcpStream::connect(uri.clone()).unwrap();
 
-        write_message_to_wire(&mut stream, HttpMessage::Request(req), RequestOptions::default());
+        let with_host_header = req.with_header(("Host", uri.as_str()));
+        write_message_to_wire(&mut stream, HttpMessage::Request(with_host_header), RequestOptions::default());
 
         let mut reader: &mut [u8] = &mut [0; 4096];
         let mut chunks_writer = Vec::with_capacity(1048576);

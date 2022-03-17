@@ -31,6 +31,7 @@ mod tests {
             assert_eq!(body, body_string(res.body));
             assert_eq!(res.headers.vec, vec!(
                 ("Accept-Encoding".to_string(), "gzip, deflate, br".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port)),
                 ("Content-Length".to_string(), "20000".to_string()),
                 ("Content-Encoding".to_string(), "br".to_string()),
             ));
@@ -56,6 +57,7 @@ mod tests {
             assert_eq!(body, body_string(res.body));
             assert_eq!(res.headers.vec, vec!(
                 ("Content-Encoding".to_string(), "br".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port)),
                 ("Content-Length".to_string(), "20000".to_string()),
             ));
         })
@@ -85,6 +87,7 @@ mod tests {
             assert_eq!(res.headers.vec, vec!(
                 ("Content-Encoding".to_string(), "br".to_string()),
                 ("Accept-Encoding".to_string(), "br".to_string()),
+                ("Host".to_string(), format!("127.0.0.1:{}", server.port)),
                 ("Transfer-Encoding".to_string(), "brotli, chunked".to_string()),
             ));
         })
@@ -101,7 +104,7 @@ mod tests {
             ("Accept-Encoding", "br, gzip, deflate"),
             ("Content-Encoding", "br"),
         ));
-        let expected_body = Headers::from_headers(&headers);
+        let expected_body = Headers::from_headers(&headers).add(("Host", format!("127.0.0.1:{}", server.port).as_str()));
 
         let str = "Some body";
         let request = Request::post(
@@ -113,7 +116,7 @@ mod tests {
             assert_eq!(expected_body.to_wire_string(), body_string(res.body));
             assert_eq!(res.status, OK);
             assert_eq!(res.headers.vec, vec!(
-                ("Content-Length".to_string(), "90".to_string()),
+                ("Content-Length".to_string(), "113".to_string()),
                 ("Content-Encoding".to_string(), "br".to_string()),
             ));
         })

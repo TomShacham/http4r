@@ -19,9 +19,14 @@ fn main() {
     let mut client = Client::new("uk.yahoo.com", 80, None);
     let request = Request::get(
         Uri::parse("/"),
-        Headers::from(vec!(("accept", "application/json")))
+        Headers::from(vec!(
+            ("accept", "application/json"),
+            ("host", "uk.yahoo.com"),
+        ))
     );
     client.handle(request, |res| {
+        println!("hello");
+        println!("st {}", res.status.to_string());
         println!("{}", body_string(res.body));
     });
 
