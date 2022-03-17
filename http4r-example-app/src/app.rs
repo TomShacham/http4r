@@ -34,7 +34,9 @@ impl<'a> App<NotFoundHandler<StaticFileHandler<'a>>> {
 
     pub fn production(env: Environment) -> App<NotFoundHandler<StaticFileHandler<'a>>> {
         let env_name = env.get("ENV").unwrap_or("production".to_string());
-        App::new(NotFoundHandler::new(StaticFileHandler::new("/resources/html", env_name)), env)
+        App::new(
+            NotFoundHandler::new(
+                StaticFileHandler::new("/resources/html", env_name)), env)
     }
 }
 

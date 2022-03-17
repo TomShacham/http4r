@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 http4r-core = "0.0.4" # import from crate.io rather than locally
 regex = "1.5.4"
+serde_json = "1.0.73"
