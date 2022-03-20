@@ -2,7 +2,7 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Write};
+    use std::io::{Cursor};
     use std::net::TcpStream;
     use http4r_core::client::Client;
     use http4r_core::handler::Handler;
@@ -452,7 +452,7 @@ When a chunked message containing a non-empty trailer is received,
     fn best_request_if_invalid_boundary_digit() {
         let mut server = Server::new(0);
         server.start(|| { Ok(PassThroughHandler {}) }, true);
-        let mut stream = TcpStream::connect(format!("127.0.0.1:{}", server.port)).unwrap();
+        TcpStream::connect(format!("127.0.0.1:{}", server.port)).unwrap();
 
         let mut client = MalformedChunkedEncodingClient { port: server.port };
 

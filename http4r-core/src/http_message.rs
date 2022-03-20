@@ -1080,6 +1080,13 @@ impl<'a> Request<'a> {
             ..self
         }
     }
+
+    pub fn with_uri(self, uri: Uri<'a>) -> Request<'a> {
+        Request {
+            uri,
+            ..self
+        }
+    }
 }
 
 pub fn body_string(mut body: Body) -> String {
