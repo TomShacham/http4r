@@ -22,7 +22,7 @@ impl<H> Handler for NotFoundHandler<H> where H: Handler {
     fn handle<F>(&mut self, req: Request, fun: F) -> () where F: FnOnce(Response) -> () + Sized {
         self.handler.handle(req, |res| {
             if res.status == NotFound || res.status == Forbidden {
-                let result = canonicalize("/resources/html/not-found.html");
+                let result = canonicalize("./resources/html/not-found.html");
                 if result.is_err() {
                     let not_found_html = fs::read_to_string(
                         canonicalize("./resources/html/not-found.html").unwrap().to_str().unwrap()
