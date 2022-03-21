@@ -1060,6 +1060,18 @@ pub struct Response<'a> {
 
 
 impl<'a> Request<'a> {
+    pub fn request(method: Method, uri: Uri, headers: Headers) -> Request {
+        Request { method, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
+    }
+
+    pub fn get(uri: Uri, headers: Headers) -> Request {
+        Request { method: GET, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
+    }
+
+    pub fn post(uri: Uri<'a>, headers: Headers, body: Body<'a>) -> Request<'a> {
+        Request { method: POST, headers, body, uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
+    }
+
     pub fn with_body(self, body: Body<'a>) -> Request<'a> {
         Request {
             body,
@@ -1239,21 +1251,6 @@ impl<'a> Response<'a> {
         }
     }
 }
-
-impl<'a> Request<'a> {
-    pub fn request(method: Method, uri: Uri, headers: Headers) -> Request {
-        Request { method, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
-    }
-
-    pub fn get(uri: Uri, headers: Headers) -> Request {
-        Request { method: GET, headers, body: Body::empty(), uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
-    }
-
-    pub fn post(uri: Uri<'a>, headers: Headers, body: Body<'a>) -> Request<'a> {
-        Request { method: POST, headers, body, uri, version: HttpVersion { major: 1, minor: 1 }, trailers: Headers::empty() }
-    }
-}
-
 
 #[derive(PartialEq, Debug)]
 #[repr(u32)]
